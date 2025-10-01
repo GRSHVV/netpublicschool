@@ -1,0 +1,12 @@
+{
+  "name": "face-recognition-pwa",
+  "version": "1.0.0",
+  "description": "Face recognition app with PWA support",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "dependencies": {
+    "express": "^4.18.2"
+  }
+}
