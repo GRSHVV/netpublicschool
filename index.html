@@ -1,0 +1,51 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <title>Face Recognition Dashboard</title>
+  <link rel="manifest" href="manifest.json">
+  <link rel="stylesheet" href="style.css">
+  <script defer src="face-api.min.js"></script>
+  <script defer src="db.js"></script>
+  <script defer src="sound.js"></script>
+  <script defer src="index.js"></script>
+</head>
+<body>
+  <div class="dashboard">
+    <!-- Main (left side) -->
+    <div class="main">
+      <!-- Top Panel (Camera) -->
+      <div class="top-panel">
+        <video id="video" autoplay muted playsinline></video>
+        <canvas id="overlay"></canvas>
+      </div>
+
+      <!-- Bottom Panel -->
+      <div class="bottom-panel">
+        <!-- Dynamic Content -->
+        <div id="modeContent">
+          <p>Select an option from the menu.</p>
+        </div>
+
+        <!-- Audit Log (Marquee) -->
+        <div class="audit-marquee">
+          <marquee id="auditTicker" behavior="scroll" direction="left" scrollamount="5">
+            No audit records yet.
+          </marquee>
+        </div>
+      </div>
+    </div>
+
+    <!-- Sidebar (right side) -->
+    <nav class="sidebar">
+      <h2>Menu</h2>
+      <ul>
+        <li><button onclick="switchMode('admin')">Register User</button></li>
+        <li><button onclick="switchMode('children')">Manage Children</button></li>
+        <li><button onclick="switchMode('relations')">Manage Relations</button></li>
+        <li><button onclick="switchMode('recognition')">Recognition Mode</button></li>
+      </ul>
+    </nav>
+  </div>
+</body>
+</html>
