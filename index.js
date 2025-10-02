@@ -23,9 +23,9 @@ async function startCamera() {
 
 async function loadModels() {
   await Promise.all([
-    faceapi.nets.tinyFaceDetector.loadFromUri("/models"),
-    faceapi.nets.faceRecognitionNet.loadFromUri("/models"),
-    faceapi.nets.faceLandmark68Net.loadFromUri("/models")
+    faceapi.nets.tinyFaceDetector.loadFromUri("models"),
+    faceapi.nets.faceRecognitionNet.loadFromUri("models"),
+    faceapi.nets.faceLandmark68Net.loadFromUri("models")
   ]);
   modelsLoaded = true;
   console.log("✅ Models loaded");
@@ -181,19 +181,24 @@ async function addChild() {
 
   if (!name) return alert("Enter child name");
 
-  await window.dbAPI.addChild({
-    id: Date.now().toString(),
-    name,
-    class: c,
-    section: s
-  });
+  try {
+    await window.dbAPI.addChild({
+      id: Date.now().toString(),
+      name,
+      class: c,
+      section: s
+    });
 
-  document.getElementById("childName").value = "";
-  document.getElementById("childClass").value = "";
-  document.getElementById("childSection").value = "";
+    document.getElementById("childName").value = "";
+    document.getElementById("childClass").value = "";
+    document.getElementById("childSection").value = "";
 
-  loadChildren();
+    loadChildren();
+  } catch (err) {
+    console.warn("Child not added:", err);
+  }
 }
+
 
 async function loadChildren() {
   const kids = await window.dbAPI.getAllChildren();

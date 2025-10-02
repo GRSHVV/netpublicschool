@@ -61,7 +61,13 @@ async function deleteUser(id) {
 
 /* Children */
 async function addChild(child) {
-  return new Promise((resolve, reject) => {
+  return new Promise(async (resolve, reject) => {
+    const existing = await getAllChildren();
+    if (existing.length >= 1000) {
+      alert("❌ Maximum children limit (1000) reached. Cannot add more.");
+      return reject("Max children limit reached");
+    }
+
     const tx = db.transaction("children", "readwrite");
     tx.objectStore("children").put(child);
     tx.oncomplete = () => resolve();
