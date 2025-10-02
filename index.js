@@ -39,7 +39,38 @@ document.addEventListener("DOMContentLoaded", async () => {
   setInterval(loadAuditTicker, 5000);
 });
 
-/* Mode Switching */
+/* ===== CSV Utilities ===== */
+function arrayToCSV(data, headers) {
+  const rows = [headers.join(",")];
+  data.forEach(obj => {
+    const row = headers.map(h => JSON.stringify(obj[h] ?? ""));
+    rows.push(row.join(","));
+  });
+  return rows.join("\n");
+}
+
+function downloadCSV(filename, csvContent) {
+  const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = filename;
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
+function parseCSV(text) {
+  const [headerLine, ...lines] = text.split("\n").filter(l => l.trim());
+  const headers = headerLine.split(",").map(h => h.replace(/(^"|"$)/g, ""));
+  return lines.map(line => {
+    const values = line.split(/,(?=(?:(?:[^"]*"){2})*[^"]*$)/).map(v => v.replace(/(^"|"$)/g, ""));
+    const obj = {};
+    headers.forEach((h, i) => { obj[h] = values[i]; });
+    return obj;
+  });
+}
+
+/* ===== Mode Switching ===== */
 function switchMode(mode) {
   currentMode = mode;
   const c = document.getElementById("modeContent");
@@ -108,7 +139,7 @@ function switchMode(mode) {
   }
 }
 
-/* Admin Detection */
+/* ===== Admin Detection ===== */
 async function startAdminDetection() {
   clearInterval(adminDetectInterval);
   const video = document.getElementById("video");
@@ -149,7 +180,7 @@ async function startAdminDetection() {
   }, 300);
 }
 
-/* Admin Capture */
+/* ===== Admin Capture ===== */
 async function captureUser() {
   if (!modelsLoaded) return alert("Models not loaded");
   const name = document.getElementById("username").value.trim();
@@ -173,7 +204,7 @@ async function captureUser() {
   loadUsers();
 }
 
-/* Children */
+/* ===== Children ===== */
 async function addChild() {
   const name = document.getElementById("childName").value.trim();
   const c = document.getElementById("childClass").value.trim();
@@ -188,17 +219,14 @@ async function addChild() {
       class: c,
       section: s
     });
-
     document.getElementById("childName").value = "";
     document.getElementById("childClass").value = "";
     document.getElementById("childSection").value = "";
-
     loadChildren();
   } catch (err) {
     console.warn("Child not added:", err);
   }
 }
-
 
 async function loadChildren() {
   const kids = await window.dbAPI.getAllChildren();
@@ -220,4 +248,94 @@ async function loadChildren() {
     li.appendChild(del);
     list.appendChild(li);
   });
+}
+
+/* ===== Global Backup/Restore with ZIP ===== */
+async function exportAll() {
+  const zip = new JSZip();
+
+  const users = await window.dbAPI.getAllUsers();
+  zip.file("users.csv", arrayToCSV(users, ["id","name","role","descriptor"]));
+
+  const kids = await window.dbAPI.getAllChildren();
+  zip.file("children.csv", arrayToCSV(kids, ["id","name","class","section"]));
+
+  const rels = await window.dbAPI.getAllRelations();
+  zip.file("relations.csv", arrayToCSV(rels, ["id","userId","childId","relation"]));
+
+  const logs = await window.dbAPI.getAllAudit();
+  zip.file("audit.csv", arrayToCSV(logs, ["id","userId","childId","timestamp"]));
+
+  const blob = await zip.generateAsync({ type: "blob" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = "backup.zip";
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
+async function importAll(event) {
+  const file = event.target.files[0];
+  if (!file) return;
+
+  const zip = await JSZip.loadAsync(file);
+
+  if (zip.files["users.csv"]) {
+    const text = await zip.files["users.csv"].async("string");
+    const records = parseCSV(text);
+    for (const rec of records) {
+      await window.dbAPI.addUser({
+        id: rec.id || Date.now().toString(),
+        name: rec.name,
+        role: rec.role,
+        descriptor: rec.descriptor ? JSON.parse(rec.descriptor) : []
+      });
+    }
+  }
+
+  if (zip.files["children.csv"]) {
+    const text = await zip.files["children.csv"].async("string");
+    const records = parseCSV(text);
+    for (const rec of records) {
+      await window.dbAPI.addChild({
+        id: rec.id || Date.now().toString(),
+        name: rec.name,
+        class: rec.class,
+        section: rec.section
+      });
+    }
+  }
+
+  if (zip.files["relations.csv"]) {
+    const text = await zip.files["relations.csv"].async("string");
+    const records = parseCSV(text);
+    for (const rec of records) {
+      await window.dbAPI.addRelation({
+        id: rec.id || Date.now().toString(),
+        userId: rec.userId,
+        childId: rec.childId,
+        relation: rec.relation
+      });
+    }
+  }
+
+  if (zip.files["audit.csv"]) {
+    const text = await zip.files["audit.csv"].async("string");
+    const records = parseCSV(text);
+    for (const rec of records) {
+      await window.dbAPI.addAudit({
+        id: rec.id || Date.now().toString(),
+        userId: rec.userId,
+        childId: rec.childId,
+        timestamp: rec.timestamp || Date.now()
+      });
+    }
+  }
+
+  alert("✅ Backup restored successfully");
+  loadUsers();
+  loadChildren();
+  loadRelations();
+  loadAuditTicker();
 }
