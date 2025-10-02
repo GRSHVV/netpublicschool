@@ -7,7 +7,12 @@ let adminDetectInterval = null;
 async function startCamera() {
   try {
     const video = document.getElementById("video");
-    const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "user" } });
+    /* const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "user" } }); */
+    const stream = await navigator.mediaDevices.getUserMedia({
+      video: { facingMode: { exact: "environment" } }  // use back camera
+    });
+    
+    
     video.srcObject = stream;
     video.onloadedmetadata = () => {
       video.play();
@@ -339,3 +344,4 @@ async function importAll(event) {
   loadRelations();
   loadAuditTicker();
 }
+
