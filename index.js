@@ -1,4 +1,4 @@
-// index.js — updated to hide camera in Child Registration mode
+// index.js — Fixed bounding box alignment in Register and Recognition modes
 
 let currentMode = null;
 let modelsLoaded = false;
@@ -14,7 +14,7 @@ function setStatus(msg) {
   console.log("[STATUS]", msg);
 }
 
-/* ===== Models ===== */
+/* ===== Load Models ===== */
 async function loadModels() {
   setStatus("Loading models...");
   await Promise.all([
@@ -26,7 +26,7 @@ async function loadModels() {
   setStatus("Models loaded ✅");
 }
 
-/* ===== Camera ===== */
+/* ===== Camera Setup ===== */
 async function ensureCameraPermission() {
   await navigator.mediaDevices.getUserMedia({ video: true });
 }
@@ -60,11 +60,20 @@ async function startCamera() {
   if (id) await startCameraById(id);
 }
 
+/* ===== Resize Canvas to Match Video ===== */
+function resizeOverlay() {
+  const v = document.getElementById("video");
+  const c = document.getElementById("overlay");
+  c.width = v.offsetWidth;
+  c.height = v.offsetHeight;
+}
+
 /* ===== Initialize ===== */
 document.addEventListener("DOMContentLoaded", async () => {
   await window.dbAPI.openDB();
   await loadModels();
   await startCamera();
+  resizeOverlay();
   switchMode("admin");
 });
 
@@ -75,11 +84,9 @@ function switchMode(mode) {
   const camera = document.getElementById("cameraArea");
   const c = document.getElementById("modeContent");
 
-  if (mode === "child") {
-    camera.classList.add("camera-hidden"); // hide camera
-  } else {
-    camera.classList.remove("camera-hidden");
-  }
+  // hide camera in child registration
+  if (mode === "child") camera.classList.add("camera-hidden");
+  else camera.classList.remove("camera-hidden");
 
   if (mode === "admin") {
     c.innerHTML = `
@@ -91,9 +98,9 @@ function switchMode(mode) {
       <button id="registerBtn" class="primary" disabled>Register</button>
       <ul id="userList"></ul>
     `;
+    document.getElementById("registerBtn").addEventListener("click", registerUser);
     detectParentFace();
     loadParents();
-    document.getElementById("registerBtn").addEventListener("click", registerUser);
   }
 
   if (mode === "child") {
@@ -127,31 +134,36 @@ function switchMode(mode) {
   }
 }
 
-/* ===== Clear Loops ===== */
+/* ===== Clear Intervals ===== */
 function clearIntervals() {
   if (adminDetectInterval) clearInterval(adminDetectInterval);
   if (recognitionInterval) clearInterval(recognitionInterval);
 }
 
-/* ===== Face Detection ===== */
+/* ===== Face Detection with Proper Alignment ===== */
 function detectParentFace() {
   const v = document.getElementById("video");
   const o = document.getElementById("overlay");
   const ctx = o.getContext("2d");
   const btn = document.getElementById("registerBtn");
+
   adminDetectInterval = setInterval(async () => {
-    const det = await faceapi
-      .detectSingleFace(v, new faceapi.TinyFaceDetectorOptions({ scoreThreshold: 0.4 }))
+    if (!modelsLoaded || !v.videoWidth) return;
+    const detection = await faceapi
+      .detectSingleFace(v, new faceapi.TinyFaceDetectorOptions({ scoreThreshold: 0.5 }))
       .withFaceLandmarks()
       .withFaceDescriptor();
+
+    const displaySize = { width: o.width, height: o.height };
+    faceapi.matchDimensions(o, displaySize);
     ctx.clearRect(0, 0, o.width, o.height);
-    if (det) {
-      const b = det.detection.box;
-      ctx.strokeStyle = "yellow";
-      ctx.lineWidth = 3;
-      ctx.strokeRect(b.x, b.y, b.width, b.height);
-      lastDetection = det;
-      btn.disabled = !document.getElementById("username").value.trim();
+
+    if (detection) {
+      const resizedDet = faceapi.resizeResults(detection, displaySize);
+      faceapi.draw.drawDetections(o, resizedDet);
+      lastDetection = detection;
+      const name = document.getElementById("username").value.trim();
+      btn.disabled = !name;
     } else {
       lastDetection = null;
       btn.disabled = true;
@@ -159,7 +171,7 @@ function detectParentFace() {
   }, 400);
 }
 
-/* ===== DB Integration ===== */
+/* ===== Parent Register ===== */
 async function registerUser() {
   const name = document.getElementById("username").value.trim();
   const role = document.getElementById("role").value;
@@ -175,6 +187,8 @@ async function loadParents() {
   const list = document.getElementById("userList");
   list.innerHTML = p.map((x) => `<li class='list-item'>${x.name} (${x.role})</li>`).join("");
 }
+
+/* ===== Child Register ===== */
 async function addChild() {
   const name = document.getElementById("childName").value.trim();
   const cls = document.getElementById("childClass").value.trim();
@@ -189,6 +203,8 @@ async function loadChildren() {
   const list = document.getElementById("childList");
   list.innerHTML = c.map((x) => `<li class='list-item'>${x.name} (${x.class}-${x.section})</li>`).join("");
 }
+
+/* ===== Linking ===== */
 async function loadLinkData() {
   const ps = document.getElementById("parentSelect");
   const cs = document.getElementById("childrenSelect");
@@ -234,6 +250,48 @@ async function loadLinks() {
     list.appendChild(li);
   });
 }
+
+/* ===== Recognition with Proper Alignment ===== */
 async function startRecognition() {
-  setStatus("Recognition ready (next: show linked children)");
+  const users = await window.dbAPI.getAllUsers();
+  if (!users.length) return;
+  const labeled = users.map(
+    (u) => new faceapi.LabeledFaceDescriptors(u.name, [new Float32Array(u.descriptor)])
+  );
+  const matcher = new faceapi.FaceMatcher(labeled, 0.6);
+  const v = document.getElementById("video");
+  const o = document.getElementById("overlay");
+  const ctx = o.getContext("2d");
+
+  recognitionInterval = setInterval(async () => {
+    if (!modelsLoaded || !v.videoWidth) return;
+    const det = await faceapi
+      .detectSingleFace(v, new faceapi.TinyFaceDetectorOptions({ scoreThreshold: 0.5 }))
+      .withFaceLandmarks()
+      .withFaceDescriptor();
+
+    const displaySize = { width: o.width, height: o.height };
+    faceapi.matchDimensions(o, displaySize);
+    ctx.clearRect(0, 0, o.width, o.height);
+
+    if (det) {
+      const resized = faceapi.resizeResults(det, displaySize);
+      const best = matcher.findBestMatch(det.descriptor);
+      faceapi.draw.drawDetections(o, resized);
+      const color = best.label === "unknown" ? "red" : "green";
+      const box = resized.detection.box;
+      ctx.strokeStyle = color;
+      ctx.lineWidth = 3;
+      ctx.strokeRect(box.x, box.y, box.width, box.height);
+      ctx.fillStyle = color;
+      ctx.font = "16px Arial";
+      ctx.fillText(best.label, box.x, box.y - 10);
+    }
+  }, 500);
 }
+
+/* ===== Cleanup ===== */
+window.addEventListener("beforeunload", () => {
+  if (currentStream) currentStream.getTracks().forEach((t) => t.stop());
+  clearIntervals();
+});
