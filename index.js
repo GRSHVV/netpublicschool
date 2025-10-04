@@ -1,4 +1,4 @@
-// index.js — Complete version with Registered Count + Edit/Update
+// index.js — full version with permission-safe camera init, count, and update
 
 let currentMode = null;
 let modelsLoaded = false;
@@ -31,86 +31,125 @@ async function loadModels() {
     setStatus("Models loaded ✅");
   } catch (err) {
     console.error("Model load error", err);
-    setStatus("Error loading models (see console)");
+    setStatus("❌ Error loading models (see console)");
+  }
+}
+
+/* ===== Request camera permission ===== */
+async function ensureCameraPermission() {
+  try {
+    await navigator.mediaDevices.getUserMedia({ video: true });
+    console.log("✅ Camera permission granted");
+  } catch (err) {
+    console.error("Camera permission denied:", err);
+    setStatus("❌ Camera permission denied. Please allow access.");
+    throw err;
   }
 }
 
 /* ===== Enumerate cameras ===== */
 async function getVideoDevices() {
-  const devices = await navigator.mediaDevices.enumerateDevices();
-  videoDevices = devices.filter((d) => d.kind === "videoinput");
-  const dropdown = document.getElementById("cameraSelect");
-  dropdown.innerHTML = "";
+  try {
+    const devices = await navigator.mediaDevices.enumerateDevices();
+    videoDevices = devices.filter((d) => d.kind === "videoinput");
+    console.log("🎥 Found cameras:", videoDevices);
 
-  if (videoDevices.length === 0) {
-    dropdown.innerHTML = "<option>No camera found</option>";
-    return;
+    const dropdown = document.getElementById("cameraSelect");
+    dropdown.innerHTML = "";
+
+    if (videoDevices.length === 0) {
+      dropdown.innerHTML = "<option>No camera found</option>";
+      setStatus("❌ No cameras detected");
+      return false;
+    }
+
+    videoDevices.forEach((device, i) => {
+      const option = document.createElement("option");
+      option.value = device.deviceId;
+      const label = device.label || `Camera ${i + 1}`;
+      option.textContent = /front|user/i.test(label)
+        ? "Front Camera"
+        : /back|rear|environment/i.test(label)
+        ? "Back Camera"
+        : label;
+      dropdown.appendChild(option);
+    });
+
+    dropdown.onchange = async (e) => {
+      const selectedId = e.target.value;
+      await startCameraById(selectedId);
+    };
+
+    return true;
+  } catch (err) {
+    console.error("enumerateDevices error", err);
+    setStatus("❌ Cannot access camera devices");
+    return false;
   }
-
-  videoDevices.forEach((device, i) => {
-    const option = document.createElement("option");
-    option.value = device.deviceId;
-    const label = device.label || `Camera ${i + 1}`;
-    option.textContent = /front|user/i.test(label)
-      ? "Front Camera"
-      : /back|rear|environment/i.test(label)
-      ? "Back Camera"
-      : label;
-    dropdown.appendChild(option);
-  });
-
-  dropdown.onchange = async (e) => {
-    const selectedId = e.target.value;
-    await startCameraById(selectedId);
-  };
 }
 
-/* ===== Start camera ===== */
+/* ===== Start camera safely ===== */
 async function startCameraById(deviceId) {
-  if (currentStream) currentStream.getTracks().forEach((t) => t.stop());
-  const stream = await navigator.mediaDevices.getUserMedia({
-    video: { deviceId: { exact: deviceId } },
-  });
-  currentStream = stream;
-  activeCamera = deviceId;
+  try {
+    if (currentStream) currentStream.getTracks().forEach((t) => t.stop());
+    const constraints = deviceId
+      ? { video: { deviceId: { exact: deviceId } } }
+      : { video: { facingMode: "environment" } };
 
-  const video = document.getElementById("video");
-  video.srcObject = stream;
-  video.onloadedmetadata = () => {
-    video.play().catch(() => {});
-    resizeOverlay();
-    const label =
-      videoDevices.find((d) => d.deviceId === deviceId)?.label || "Camera";
-    setStatus(`Camera active: ${label}`);
-    document.getElementById("video-status").style.display = "none";
-  };
+    const stream = await navigator.mediaDevices.getUserMedia(constraints);
+    currentStream = stream;
+    activeCamera = deviceId;
+
+    const video = document.getElementById("video");
+    video.srcObject = stream;
+
+    video.onloadedmetadata = () => {
+      video.play().catch(() => {});
+      resizeOverlay();
+      const label =
+        videoDevices.find((d) => d.deviceId === deviceId)?.label || "Camera";
+      setStatus(`✅ Camera active: ${label}`);
+      document.getElementById("video-status").style.display = "none";
+    };
+  } catch (err) {
+    console.error("startCameraById error", err);
+    setStatus("❌ Unable to start camera. Check permission or use HTTPS.");
+  }
 }
 
-/* ===== Default camera start ===== */
+/* ===== Start default camera ===== */
 async function startCamera() {
-  await getVideoDevices();
-  if (videoDevices.length === 0) return;
+  await ensureCameraPermission();
+  const ok = await getVideoDevices();
+  if (!ok || videoDevices.length === 0) return;
+
   const defaultDevice =
     videoDevices.find((d) => /back|rear|environment/i.test(d.label))?.deviceId ||
     videoDevices[0].deviceId;
+
   document.getElementById("cameraSelect").value = defaultDevice;
   await startCameraById(defaultDevice);
 }
 
-/* ===== Overlay Resize ===== */
+/* ===== Overlay resize ===== */
 function resizeOverlay() {
   const video = document.getElementById("video");
   const canvas = document.getElementById("overlay");
+  if (!video || !canvas) return;
   canvas.width = video.videoWidth || canvas.clientWidth;
   canvas.height = video.videoHeight || canvas.clientHeight;
 }
 
 /* ===== Init ===== */
 document.addEventListener("DOMContentLoaded", async () => {
-  await window.dbAPI.openDB();
-  await loadModels();
-  await startCamera();
-  switchMode("admin");
+  try {
+    await window.dbAPI.openDB();
+    await loadModels();
+    await startCamera();
+    switchMode("admin");
+  } catch (err) {
+    console.error("Startup error:", err);
+  }
 });
 
 /* ===== Mode Switch ===== */
