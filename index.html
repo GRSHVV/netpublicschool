@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Face Registration & Recognition</title>
+  <title>Smart Pickup System</title>
   <link rel="stylesheet" href="style.css" />
   <script defer src="face-api.min.js"></script>
   <script defer src="db.js"></script>
@@ -11,14 +11,15 @@
 </head>
 <body>
   <div class="app-container">
+    
     <!-- Camera Section -->
-    <section class="camera-area">
+    <section class="camera-area" id="cameraArea">
       <video id="video" autoplay muted playsinline></video>
       <canvas id="overlay"></canvas>
       <div id="video-status" class="video-status">Initializing camera...</div>
     </section>
 
-    <!-- Menu Panel -->
+    <!-- Menu / Control Panel -->
     <aside class="menu-panel">
       <h2 class="app-title">Smart Pickup System</h2>
 
@@ -36,7 +37,8 @@
       </div>
 
       <div class="status-box">
-        <strong>Status:</strong> <span id="statusMsg">Initializing...</span>
+        <strong>Status:</strong>
+        <span id="statusMsg">Initializing...</span>
       </div>
 
       <div id="modeContent" class="mode-content">
