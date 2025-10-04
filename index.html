@@ -2,8 +2,8 @@
 <html lang="en">
 <head>
   <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Face Registration & Recognition</title>
-  <meta name="viewport" content="width=device-width,initial-scale=1" />
   <link rel="stylesheet" href="style.css" />
   <script defer src="face-api.min.js"></script>
   <script defer src="db.js"></script>
@@ -11,33 +11,36 @@
 </head>
 <body>
   <div class="app-container">
-    <!-- Camera area -->
+    
+    <!-- Camera section -->
     <section class="camera-area">
       <video id="video" autoplay muted playsinline></video>
       <canvas id="overlay"></canvas>
       <div id="video-status" class="video-status">Loading camera...</div>
     </section>
 
-    <!-- Control Panel -->
+    <!-- Right/Bottom control panel -->
     <aside class="menu-panel">
-      <div class="menu-buttons">
-        <button id="btnRegisterMode" onclick="switchMode('admin')">Register User</button>
-        <button id="btnRecognitionMode" onclick="switchMode('recognition')">Recognition</button>
-      </div>
+      <h2 class="app-title">Face System</h2>
 
       <div class="camera-controls">
-  		<label for="cameraSelect"><strong>Camera:</strong></label>
-  		<select id="cameraSelect"></select>
-  		<button id="btnStartCamera" onclick="startCamera()">Start Camera</button>
-	</div>
-
-
-      <div id="statusBox" class="status-box">
-        <strong>Status:</strong> <span id="statusMsg">Initializing...</span>
+        <label for="cameraSelect">Camera:</label>
+        <select id="cameraSelect"></select>
+        <button id="btnStartCamera" onclick="startCamera()">Start</button>
       </div>
 
-      <div class="menu-content" id="modeContent">
-        <p>Select a mode to begin (Register or Recognition).</p>
+      <div class="menu-buttons">
+        <button id="btnRegisterMode" onclick="switchMode('admin')">Register</button>
+        <button id="btnRecognitionMode" onclick="switchMode('recognition')">Recognize</button>
+      </div>
+
+      <div class="status-box">
+        <strong>Status:</strong>
+        <span id="statusMsg">Initializing...</span>
+      </div>
+
+      <div id="modeContent" class="mode-content">
+        <p>Select a mode to begin.</p>
       </div>
     </aside>
   </div>

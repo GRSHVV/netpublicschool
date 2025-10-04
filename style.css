@@ -1,21 +1,262 @@
+/* ===== Global ===== */
+* {
+  box-sizing: border-box;
+}
+body {
+  margin: 0;
+  font-family: "Segoe UI", Roboto, sans-serif;
+  background: #f5f8fb;
+  color: #222;
+  height: 100vh;
+  overflow: hidden;
+}
+
+/* ===== App Container ===== */
+.app-container {
+  display: flex;
+  flex-direction: row;
+  width: 100vw;
+  height: 100vh;
+  transition: all 0.3s ease;
+}
+
+/* ===== Camera Area ===== */
+.camera-area {
+  position: relative;
+  flex: 1 1 70%;
+  background: #000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+}
+
+video,
+canvas {
+  position: absolute;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  top: 0;
+  left: 0;
+}
+
+.video-status {
+  position: absolute;
+  bottom: 10px;
+  left: 10px;
+  padding: 6px 10px;
+  background: rgba(0, 0, 0, 0.6);
+  color: white;
+  border-radius: 6px;
+  font-size: 0.9rem;
+}
+
+/* ===== Control Panel ===== */
+.menu-panel {
+  width: 350px;
+  max-width: 40%;
+  background: #ffffff;
+  box-shadow: -4px 0 12px rgba(0, 0, 0, 0.08);
+  display: flex;
+  flex-direction: column;
+  padding: 16px;
+  overflow-y: auto;
+  transition: all 0.3s ease;
+}
+
+.app-title {
+  margin: 0 0 12px;
+  text-align: center;
+  color: #1976d2;
+  font-size: 1.4rem;
+  font-weight: 700;
+}
+
+/* ===== Camera Controls ===== */
 .camera-controls {
   display: flex;
+  align-items: center;
   gap: 8px;
-  margin-bottom: 10px;
+  margin-bottom: 12px;
+}
+
+.camera-controls label {
+  white-space: nowrap;
+  font-size: 0.9rem;
+  color: #333;
+}
+
+.camera-controls select {
+  flex: 1;
+  padding: 6px 8px;
+  border: 1px solid #d0d7de;
+  border-radius: 6px;
+  background: #fff;
+  font-size: 0.9rem;
+  outline: none;
 }
 
 .camera-controls button {
+  background: #2e7d32;
+  color: white;
+  border: none;
+  border-radius: 6px;
+  padding: 7px 10px;
+  cursor: pointer;
+  font-weight: 600;
+  transition: background 0.2s;
+}
+.camera-controls button:hover {
+  background: #1b5e20;
+}
+
+/* ===== Mode Buttons ===== */
+.menu-buttons {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+.menu-buttons button {
   flex: 1;
-  background: #444;
-  color: #fff;
+  background: #1976d2;
+  color: white;
   border: none;
   border-radius: 6px;
   padding: 10px;
-  cursor: pointer;
   font-weight: 600;
+  cursor: pointer;
   transition: background 0.25s;
 }
+.menu-buttons button:hover {
+  background: #0d47a1;
+}
 
-.camera-controls button:hover {
-  background: #222;
+/* ===== Status Box ===== */
+.status-box {
+  background: #f1f5f9;
+  border-radius: 6px;
+  padding: 8px;
+  margin-bottom: 12px;
+  font-size: 0.9rem;
+  line-height: 1.4;
+}
+
+/* ===== Mode Content ===== */
+.mode-content {
+  flex: 1;
+  font-size: 0.9rem;
+}
+
+.form-group {
+  margin-bottom: 10px;
+}
+.form-group label {
+  display: block;
+  font-weight: 600;
+  margin-bottom: 4px;
+}
+input[type="text"],
+select {
+  width: 100%;
+  padding: 8px;
+  border-radius: 6px;
+  border: 1px solid #d0d7de;
+  font-size: 0.95rem;
+}
+
+#registerBtn {
+  width: 100%;
+  padding: 10px;
+  border: none;
+  border-radius: 6px;
+  background: #43a047;
+  color: white;
+  font-weight: 700;
+  cursor: pointer;
+}
+#registerBtn:disabled {
+  background: #cfd8dc;
+  cursor: not-allowed;
+}
+
+/* ===== Registered User List ===== */
+#userList {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+#userList li {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  background: #fafafa;
+  border-radius: 6px;
+  padding: 6px 8px;
+  margin-bottom: 6px;
+}
+#userList button {
+  background: #e53935;
+  color: white;
+  border: none;
+  border-radius: 6px;
+  padding: 4px 8px;
+  cursor: pointer;
+}
+#userList button:hover {
+  background: #b71c1c;
+}
+
+/* ===== Responsive: Portrait ===== */
+@media (max-width: 900px), (orientation: portrait) {
+  .app-container {
+    flex-direction: column;
+  }
+
+  .camera-area {
+    width: 100%;
+    height: 60vh;
+    flex: 0 0 auto;
+  }
+
+  .menu-panel {
+    width: 100%;
+    height: 40vh;
+    box-shadow: 0 -4px 10px rgba(0, 0, 0, 0.08);
+  }
+
+  .camera-controls {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .menu-buttons {
+    flex-direction: column;
+  }
+
+  .app-title {
+    font-size: 1.2rem;
+  }
+}
+
+/* ===== Responsive: Landscape Tablets ===== */
+@media (orientation: landscape) and (max-height: 600px) {
+  .app-container {
+    flex-direction: row;
+  }
+
+  .camera-area {
+    flex: 1 1 65%;
+  }
+
+  .menu-panel {
+    width: 35%;
+    height: 100%;
+    box-shadow: -4px 0 10px rgba(0, 0, 0, 0.08);
+  }
+
+  .camera-controls,
+  .menu-buttons {
+    flex-direction: row;
+  }
 }
