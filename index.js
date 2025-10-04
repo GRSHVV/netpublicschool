@@ -1,15 +1,24 @@
 let currentMode = null;
 let modelsLoaded = false;
-let lastRecognizedId = null;
-let adminAutoInterval = null;
 let currentStream = null;
+let adminDetectInterval = null;
+let lastDetection = null;
 
-/* Camera + Models */
+/* ===== Load Models ===== */
+async function loadModels() {
+  await Promise.all([
+    faceapi.nets.tinyFaceDetector.loadFromUri("models"),
+    faceapi.nets.faceLandmark68Net.loadFromUri("models"),
+    faceapi.nets.faceRecognitionNet.loadFromUri("models")
+  ]);
+  modelsLoaded = true;
+  console.log("✅ Models loaded");
+}
+
+/* ===== Start Camera ===== */
 async function startCamera(deviceId = null) {
   try {
-    if (currentStream) {
-      currentStream.getTracks().forEach(track => track.stop());
-    }
+    if (currentStream) currentStream.getTracks().forEach(track => track.stop());
 
     const constraints = {
       video: deviceId ? { deviceId: { exact: deviceId } } : { facingMode: "environment" }
@@ -28,54 +37,23 @@ async function startCamera(deviceId = null) {
     };
   } catch (err) {
     console.error("Camera error:", err);
-    alert("Camera permission denied");
+    alert("Could not access camera. Please allow permissions.");
   }
 }
 
-async function loadModels() {
-  await Promise.all([
-    faceapi.nets.tinyFaceDetector.loadFromUri("models"),
-    faceapi.nets.faceRecognitionNet.loadFromUri("models"),
-    faceapi.nets.faceLandmark68Net.loadFromUri("models")
-  ]);
-  modelsLoaded = true;
-  console.log("✅ Models loaded");
-}
-
+/* ===== Page Load ===== */
 document.addEventListener("DOMContentLoaded", async () => {
   await window.dbAPI.openDB();
   await loadModels();
   await startCamera();
   loadAuditTicker();
-  setInterval(loadAuditTicker, 5000);
 });
 
-/* ===== Camera Selection ===== */
-async function populateCameras() {
-  const devices = await navigator.mediaDevices.enumerateDevices();
-  const videoDevices = devices.filter(d => d.kind === "videoinput");
-  const select = document.getElementById("cameraSelect");
-  if (!select) return;
-  select.innerHTML = "";
-  videoDevices.forEach((device, index) => {
-    const option = document.createElement("option");
-    option.value = device.deviceId;
-    option.textContent = device.label || `Camera ${index + 1}`;
-    select.appendChild(option);
-  });
-}
-
-async function changeCamera() {
-  const select = document.getElementById("cameraSelect");
-  if (!select) return;
-  const deviceId = select.value;
-  await startCamera(deviceId);
-}
-
-/* ===== Mode Switching ===== */
+/* ===== Mode Switch ===== */
 function switchMode(mode) {
   currentMode = mode;
   const c = document.getElementById("modeContent");
+  clearInterval(adminDetectInterval);
 
   if (mode === "admin") {
     c.innerHTML = `
@@ -88,87 +66,50 @@ function switchMode(mode) {
             <option>Guardian</option><option>Other</option>
           </select>
         </div>
+        <p style="font-size: 0.85em; color: #777;">📷 Show your face or a photo in front of the camera.</p>
         <h4>Registered Users</h4><ul id="userList"></ul>
+      </div>
+      <div class="actions">
+        <button id="registerBtn" disabled onclick="registerFace()">Register</button>
       </div>
     `;
     loadUsers();
-    startAdminAutoCapture();
-  }
-
-  if (mode === "children") {
-    c.innerHTML = `
-      <h3>Manage Children</h3>
-      <div class="scroll-area">
-        <div class="form-group"><label>Child Name</label><input id="childName"></div>
-        <div class="form-group"><label>Class</label><input id="childClass"></div>
-        <div class="form-group"><label>Section</label><input id="childSection"></div>
-        <h4>Children</h4><ul id="childrenList"></ul>
-      </div>
-      <div class="actions">
-        <button onclick="addChild()">Add</button>
-      </div>
-    `;
-    loadChildren();
-  }
-
-  if (mode === "relations") {
-    c.innerHTML = `
-      <h3>Manage Relations</h3>
-      <div class="scroll-area">
-        <div class="form-group"><label>User</label><select id="userSelect"></select></div>
-        <div class="form-group"><label>Child</label><select id="childSelect"></select></div>
-        <div class="form-group"><label>Relation</label>
-          <select id="relationLabel">
-            <option>Father</option><option>Mother</option>
-            <option>Guardian</option><option>Other</option>
-          </select>
-        </div>
-        <h4>Relations</h4><ul id="relationList"></ul>
-      </div>
-      <div class="actions">
-        <button onclick="linkRelation()">Link</button>
-      </div>
-    `;
-    loadRelations();
+    startLiveDetection();
   }
 
   if (mode === "recognition") {
     c.innerHTML = `
-      <h3>Recognition</h3>
-      <div class="scroll-area" id="childSelection">
-        <div class="form-group">
-          <label for="cameraSelect">Camera</label>
-          <select id="cameraSelect" onchange="changeCamera()"></select>
-        </div>
-      </div>
-      <div class="actions">
-        <button onclick="submitPickup()">Submit Pickup</button>
-      </div>
+      <h3>Recognition (Live Only)</h3>
+      <div class="scroll-area" id="childSelection"></div>
     `;
-    populateCameras();
     startRecognition();
   }
 }
 
-/* ===== Admin Auto Capture ===== */
-async function startAdminAutoCapture() {
-  clearInterval(adminAutoInterval);
+/* ===== Adaptive Threshold Detection for Registration ===== */
+async function startLiveDetection() {
   const video = document.getElementById("video");
   const canvas = document.getElementById("overlay");
   const ctx = canvas.getContext("2d");
+  const btn = document.getElementById("registerBtn");
 
-  adminAutoInterval = setInterval(async () => {
+  adminDetectInterval = setInterval(async () => {
     if (currentMode !== "admin") {
-      clearInterval(adminAutoInterval);
+      clearInterval(adminDetectInterval);
       return;
     }
     if (!modelsLoaded || video.readyState !== 4) return;
 
-    const name = document.getElementById("username").value.trim();
-    const role = document.getElementById("role").value.trim();
+    // Dynamically adjust threshold based on face size
+    let threshold = 0.4;
+    if (lastDetection) {
+      const boxWidthRatio = lastDetection.detection.box.width / video.videoWidth;
+      if (boxWidthRatio < 0.2) threshold = 0.3; // small/far face
+      else if (boxWidthRatio > 0.5) threshold = 0.5; // close/large face
+    }
 
     const detection = await faceapi
-      .detectSingleFace(video, new faceapi.TinyFaceDetectorOptions({ inputSize: 320, scoreThreshold: 0.5 }))
+      .detectSingleFace(video, new faceapi.TinyFaceDetectorOptions({ inputSize: 320, scoreThreshold: threshold }))
       .withFaceLandmarks()
       .withFaceDescriptor();
 
@@ -180,45 +121,55 @@ async function startAdminAutoCapture() {
       ctx.lineWidth = 3;
       ctx.strokeRect(x, y, width, height);
 
-      if (name && role) {
-        // Take snapshot
-        const snapCanvas = document.createElement("canvas");
-        snapCanvas.width = video.videoWidth;
-        snapCanvas.height = video.videoHeight;
-        const snapCtx = snapCanvas.getContext("2d");
-        snapCtx.drawImage(video, 0, 0, snapCanvas.width, snapCanvas.height);
-        const photo = snapCanvas.toDataURL("image/png");
+      lastDetection = detection;
 
-        // Save user
-        const user = {
-          id: Date.now().toString(),
-          name,
-          role,
-          descriptor: Array.from(detection.descriptor),
-          photo
-        };
-        await window.dbAPI.addUser(user);
-
-        alert(`✅ Registered ${name}`);
-        document.getElementById("username").value = "";
-        loadUsers();
-
-        clearInterval(adminAutoInterval); // stop after registration
-      }
+      const name = document.getElementById("username").value.trim();
+      btn.disabled = !name;
+    } else {
+      btn.disabled = true;
+      lastDetection = null;
     }
-  }, 500);
+  }, 400);
 }
 
-/* ===== Users List ===== */
+/* ===== Register User ===== */
+async function registerFace() {
+  const name = document.getElementById("username").value.trim();
+  const role = document.getElementById("role").value.trim();
+  if (!name) return alert("Enter name first");
+  if (!lastDetection) return alert("No face detected");
+
+  const video = document.getElementById("video");
+  const snapCanvas = document.createElement("canvas");
+  snapCanvas.width = video.videoWidth;
+  snapCanvas.height = video.videoHeight;
+  const ctx = snapCanvas.getContext("2d");
+  ctx.drawImage(video, 0, 0, snapCanvas.width, snapCanvas.height);
+  const photo = snapCanvas.toDataURL("image/png");
+
+  const user = {
+    id: Date.now().toString(),
+    name,
+    role,
+    descriptor: Array.from(lastDetection.descriptor),
+    photo
+  };
+
+  await window.dbAPI.addUser(user);
+  alert(`✅ Registered ${name}`);
+
+  document.getElementById("username").value = "";
+  loadUsers();
+}
+
+/* ===== Load Users ===== */
 async function loadUsers() {
   const users = await window.dbAPI.getAllUsers();
   const list = document.getElementById("userList");
   if (!list) return;
   list.innerHTML = "";
-
   users.forEach(u => {
     const li = document.createElement("li");
-
     if (u.photo) {
       const img = document.createElement("img");
       img.src = u.photo;
@@ -228,11 +179,9 @@ async function loadUsers() {
       img.style.marginRight = "8px";
       li.appendChild(img);
     }
-
     const span = document.createElement("span");
     span.textContent = `${u.name} (${u.role})`;
     li.appendChild(span);
-
     const del = document.createElement("button");
     del.textContent = "Delete";
     del.className = "danger small";
@@ -240,8 +189,46 @@ async function loadUsers() {
       await window.dbAPI.deleteUser(u.id);
       loadUsers();
     };
-
     li.appendChild(del);
     list.appendChild(li);
   });
+}
+
+/* ===== Recognition Mode ===== */
+async function startRecognition() {
+  const video = document.getElementById("video");
+  const canvas = document.getElementById("overlay");
+  const ctx = canvas.getContext("2d");
+  const users = await window.dbAPI.getAllUsers();
+
+  if (users.length === 0) return;
+
+  const labeled = users.map(u => new faceapi.LabeledFaceDescriptors(
+    u.name,
+    [new Float32Array(u.descriptor)]
+  ));
+  const matcher = new faceapi.FaceMatcher(labeled, 0.6);
+
+  setInterval(async () => {
+    if (currentMode !== "recognition") return;
+    if (!modelsLoaded || video.readyState !== 4) return;
+
+    const detection = await faceapi
+      .detectSingleFace(video, new faceapi.TinyFaceDetectorOptions({ inputSize: 320, scoreThreshold: 0.5 }))
+      .withFaceLandmarks()
+      .withFaceDescriptor();
+
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+    if (detection) {
+      const { x, y, width, height } = detection.detection.box;
+      ctx.strokeStyle = "green";
+      ctx.lineWidth = 3;
+      ctx.strokeRect(x, y, width, height);
+
+      const bestMatch = matcher.findBestMatch(detection.descriptor);
+      document.getElementById("childSelection").innerHTML =
+        `<p>${bestMatch.label !== "unknown" ? `Recognized: <strong>${bestMatch.label}</strong>` : "❌ Unrecognized"}</p>`;
+    }
+  }, 600);
 }
