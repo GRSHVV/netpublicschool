@@ -5,31 +5,33 @@
   <title>Face Registration & Recognition</title>
   <meta name="viewport" content="width=device-width,initial-scale=1" />
   <link rel="stylesheet" href="style.css" />
-  <!-- face-api must be present in your project root or served -->
   <script defer src="face-api.min.js"></script>
   <script defer src="db.js"></script>
   <script defer src="index.js"></script>
 </head>
 <body>
   <div class="app-container">
-    <!-- Camera area (large) -->
+    <!-- Camera area -->
     <section class="camera-area">
       <video id="video" autoplay muted playsinline></video>
       <canvas id="overlay"></canvas>
       <div id="video-status" class="video-status">Loading camera...</div>
     </section>
 
-    <!-- Right menu / controls -->
+    <!-- Control Panel -->
     <aside class="menu-panel">
       <div class="menu-buttons">
         <button id="btnRegisterMode" onclick="switchMode('admin')">Register User</button>
         <button id="btnRecognitionMode" onclick="switchMode('recognition')">Recognition</button>
-        <button id="btnStartCamera" onclick="startCamera()" title="Use this if camera didn't start">Start Camera</button>
+      </div>
+
+      <div class="camera-controls">
+        <button id="btnStartCamera" onclick="startCamera()">Start Camera</button>
+        <button id="btnFlipCamera" onclick="flipCamera()">Flip Camera</button>
       </div>
 
       <div id="statusBox" class="status-box">
-        <div><strong>Status</strong></div>
-        <div id="statusMsg">Initializing...</div>
+        <strong>Status:</strong> <span id="statusMsg">Initializing...</span>
       </div>
 
       <div class="menu-content" id="modeContent">
