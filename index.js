@@ -1,5 +1,5 @@
 // index.js — Smart Pickup System
-// Full version with 3-second persistent bounding box for registration and recognition
+// With many-to-many parent-child linking and multiple children display in recognition
 
 let currentMode = null;
 let modelsLoaded = false;
@@ -61,7 +61,10 @@ async function startCameraById(deviceId) {
   currentStream = stream;
   const v = document.getElementById("video");
   v.srcObject = stream;
-  v.onloadedmetadata = () => v.play();
+  v.onloadedmetadata = () => {
+    v.play();
+    resizeOverlay();
+  };
 }
 
 async function startCamera() {
@@ -87,6 +90,7 @@ document.addEventListener("DOMContentLoaded", async () => {
   await startCamera();
   resizeOverlay();
   switchMode("admin");
+  window.addEventListener("resize", resizeOverlay);
 });
 
 /* =====================================================
@@ -101,7 +105,6 @@ function switchMode(mode) {
   if (["child", "class"].includes(mode)) camera.classList.add("camera-hidden");
   else camera.classList.remove("camera-hidden");
 
-  /* ---------------- Parent Registration ---------------- */
   if (mode === "admin") {
     c.innerHTML = `
       <h3>Register Parent</h3>
@@ -117,7 +120,6 @@ function switchMode(mode) {
     loadParents();
   }
 
-  /* ---------------- Child Registration ---------------- */
   if (mode === "child") {
     c.innerHTML = `
       <h3>Register Child</h3>
@@ -132,7 +134,6 @@ function switchMode(mode) {
     loadChildren();
   }
 
-  /* ---------------- Class & Section Management ---------------- */
   if (mode === "class") {
     c.innerHTML = `
       <h3>Manage Classes & Sections</h3>
@@ -141,9 +142,7 @@ function switchMode(mode) {
         <button id="addClassBtn" class="primary">Add</button>
       </div>
       <ul id="classList"></ul>
-
       <hr>
-
       <div class="form-group"><label>Add Section</label>
         <input id="sectionName" placeholder="e.g. A" />
         <button id="addSectionBtn" class="primary">Add</button>
@@ -156,7 +155,6 @@ function switchMode(mode) {
     loadSectionList();
   }
 
-  /* ---------------- Parent–Child Linking ---------------- */
   if (mode === "link") {
     c.innerHTML = `
       <h3>Link Parents & Children</h3>
@@ -184,7 +182,6 @@ function switchMode(mode) {
     loadLinks();
   }
 
-  /* ---------------- Recognition ---------------- */
   if (mode === "recognition") {
     c.innerHTML = `
       <h3>Recognition</h3>
@@ -195,193 +192,8 @@ function switchMode(mode) {
 }
 
 /* =====================================================
-   FACE DETECTION (3-second persistence)
+   LINK MULTIPLE CHILDREN FIX
 ===================================================== */
-function detectParentFace() {
-  const v = document.getElementById("video");
-  const o = document.getElementById("overlay");
-  const ctx = o.getContext("2d");
-  const btn = document.getElementById("registerBtn");
-
-  adminDetectInterval = setInterval(async () => {
-    if (!modelsLoaded || !v.videoWidth) return;
-    const now = Date.now();
-
-    // Keep existing bounding box for 3 seconds
-    if (lastDetection && now - lastDrawTime < 3000) return;
-
-    const detection = await faceapi
-      .detectSingleFace(v, new faceapi.TinyFaceDetectorOptions({ scoreThreshold: 0.5 }))
-      .withFaceLandmarks()
-      .withFaceDescriptor();
-
-    const displaySize = { width: o.width, height: o.height };
-    faceapi.matchDimensions(o, displaySize);
-    ctx.clearRect(0, 0, o.width, o.height);
-
-    if (detection) {
-      const resized = faceapi.resizeResults(detection, displaySize);
-      faceapi.draw.drawDetections(o, resized);
-      lastDetection = detection;
-      lastDrawTime = now;
-      btn.disabled = !document.getElementById("username").value.trim();
-    } else {
-      if (now - lastDrawTime >= 3000) {
-        ctx.clearRect(0, 0, o.width, o.height);
-        lastDetection = null;
-        btn.disabled = true;
-      }
-    }
-  }, 300);
-}
-
-/* =====================================================
-   REGISTER PARENT
-===================================================== */
-async function registerUser() {
-  const name = document.getElementById("username").value.trim();
-  const role = document.getElementById("role").value;
-  if (!name || !lastDetection) return alert("Show face & enter name.");
-  const desc = Array.from(lastDetection.descriptor);
-  const u = { id: Date.now().toString(), name, role, descriptor: desc };
-  await window.dbAPI.addUser(u);
-  alert("Parent registered!");
-  loadParents();
-}
-
-async function loadParents() {
-  const p = await window.dbAPI.getAllUsers();
-  const list = document.getElementById("userList");
-  list.innerHTML = p.map((x) => `<li class='list-item'>${x.name} (${x.role})</li>`).join("");
-}
-
-/* =====================================================
-   REGISTER CHILD
-===================================================== */
-async function addChild() {
-  const name = document.getElementById("childName").value.trim();
-  const cls = document.getElementById("childClass").value.trim();
-  const sec = document.getElementById("childSection").value.trim();
-  if (!name || !cls || !sec) return alert("Enter all fields.");
-  await window.dbAPI.addChild({ id: Date.now().toString(), name, class: cls, section: sec });
-  alert("Child added!");
-  loadChildren();
-}
-
-async function loadChildren() {
-  const c = await window.dbAPI.getAllChildren();
-  const list = document.getElementById("childList");
-  list.innerHTML = c.map((x) => `<li class='list-item'>${x.name} (${x.class}-${x.section})</li>`).join("");
-}
-
-/* =====================================================
-   CLASS & SECTION MANAGEMENT
-===================================================== */
-async function addClass() {
-  const name = document.getElementById("className").value.trim();
-  if (!name) return alert("Enter class name");
-  await window.dbAPI.addClass(name);
-  document.getElementById("className").value = "";
-  loadClassList();
-}
-
-async function addSection() {
-  const name = document.getElementById("sectionName").value.trim();
-  if (!name) return alert("Enter section name");
-  await window.dbAPI.addSection(name);
-  document.getElementById("sectionName").value = "";
-  loadSectionList();
-}
-
-async function loadClassList() {
-  const list = document.getElementById("classList");
-  const classes = await window.dbAPI.getAllClasses();
-  list.innerHTML = classes
-    .map(
-      (x) => `<li class='list-item'>${x.name}
-        <button class='danger' onclick="deleteClass('${x.id}')">Delete</button></li>`
-    )
-    .join("");
-}
-
-async function loadSectionList() {
-  const list = document.getElementById("sectionList");
-  const sections = await window.dbAPI.getAllSections();
-  list.innerHTML = sections
-    .map(
-      (x) => `<li class='list-item'>${x.name}
-        <button class='danger' onclick="deleteSection('${x.id}')">Delete</button></li>`
-    )
-    .join("");
-}
-
-async function deleteClass(id) {
-  await window.dbAPI.deleteClass(id);
-  loadClassList();
-}
-async function deleteSection(id) {
-  await window.dbAPI.deleteSection(id);
-  loadSectionList();
-}
-
-async function loadClassSectionOptions(classId, sectionId) {
-  const classSelect = document.getElementById(classId);
-  const sectionSelect = document.getElementById(sectionId);
-  const classes = await window.dbAPI.getAllClasses();
-  const sections = await window.dbAPI.getAllSections();
-  classSelect.innerHTML = classes.map((c) => `<option>${c.name}</option>`).join("");
-  sectionSelect.innerHTML = sections.map((s) => `<option>${s.name}</option>`).join("");
-}
-
-/* =====================================================
-   PARENT–CHILD LINKING
-===================================================== */
-async function setupLinkSearchHandlers() {
-  const parentInput = document.getElementById("parentSearch");
-  const parentSelect = document.getElementById("parentSelect");
-  const childInput = document.getElementById("childSearch");
-  const classSelect = document.getElementById("linkClass");
-  const sectionSelect = document.getElementById("linkSection");
-  const childSelect = document.getElementById("childrenSelect");
-
-  parentInput.oninput = async () => {
-    const term = parentInput.value.trim().toLowerCase();
-    const parents = await window.dbAPI.getAllUsers();
-    parentSelect.innerHTML = "";
-    if (term.length >= 3) {
-      const filtered = parents.filter((p) => p.name.toLowerCase().startsWith(term));
-      filtered.forEach((p) => {
-        const opt = document.createElement("option");
-        opt.value = p.id;
-        opt.textContent = `${p.name} (${p.role})`;
-        parentSelect.appendChild(opt);
-      });
-    }
-  };
-
-  const updateChildList = async () => {
-    const term = childInput.value.trim().toLowerCase();
-    const cls = classSelect.value.trim().toLowerCase();
-    const sec = sectionSelect.value.trim().toLowerCase();
-    const allChildren = await window.dbAPI.getAllChildren();
-    childSelect.innerHTML = "";
-    const filtered = allChildren.filter((ch) => {
-      const matchName = term.length >= 3 ? ch.name.toLowerCase().startsWith(term) : true;
-      const matchClass = cls ? ch.class.toLowerCase() === cls : true;
-      const matchSec = sec ? ch.section.toLowerCase() === sec : true;
-      return matchName && matchClass && matchSec;
-    });
-    filtered.forEach((c) => {
-      const opt = document.createElement("option");
-      opt.value = c.id;
-      opt.textContent = `${c.name} (${c.class}-${c.section})`;
-      childSelect.appendChild(opt);
-    });
-  };
-
-  [childInput, classSelect, sectionSelect].forEach((el) => (el.oninput = updateChildList));
-}
-
 async function linkParentChild() {
   const pid = document.getElementById("parentSelect").value;
   const cs = Array.from(document.getElementById("childrenSelect").selectedOptions).map(
@@ -389,7 +201,7 @@ async function linkParentChild() {
   );
   if (!pid || !cs.length) return alert("Select parent and at least one child.");
   await window.dbAPI.linkParentChildren(pid, cs);
-  alert("Linked successfully!");
+  alert("✅ Linked successfully!");
   loadLinks();
 }
 
@@ -401,129 +213,15 @@ async function loadLinks() {
   list.innerHTML = "";
   links.forEach((l) => {
     const par = p.find((x) => x.id === l.parentId);
-    const kids = l.childrenIds.map((cid) => c.find((ch) => ch.id === cid)?.name);
+    const kids = l.childrenIds
+      .map((cid) => {
+        const child = c.find((ch) => ch.id === cid);
+        return child ? `${child.name} (${child.class}-${child.section})` : "";
+      })
+      .join(", ");
     const li = document.createElement("li");
     li.className = "list-item";
-    li.textContent = `${par?.name} → ${kids.join(", ")}`;
+    li.textContent = `${par?.name} → ${kids}`;
     list.appendChild(li);
   });
 }
-
-/* =====================================================
-   RECOGNITION (with 3-second persistence)
-===================================================== */
-async function startRecognition() {
-  const users = await window.dbAPI.getAllUsers();
-  const links = await window.dbAPI.getAllLinks();
-  const children = await window.dbAPI.getAllChildren();
-
-  if (!users.length) {
-    setStatus("⚠️ No registered parents found.");
-    return;
-  }
-
-  // Create labeled face descriptors
-  const labeled = users.map(
-    (u) => new faceapi.LabeledFaceDescriptors(u.name, [new Float32Array(u.descriptor)])
-  );
-  const matcher = new faceapi.FaceMatcher(labeled, 0.7); // relaxed threshold
-
-  const v = document.getElementById("video");
-  const o = document.getElementById("overlay");
-  const ctx = o.getContext("2d");
-  const resultBox = document.getElementById("recognitionResult");
-
-  let lastResultTime = 0;
-  let lastResult = null;
-
-  recognitionInterval = setInterval(async () => {
-    if (!modelsLoaded || !v.videoWidth) return;
-    const now = Date.now();
-
-    // Dynamically sync overlay canvas size to video
-    const videoRect = v.getBoundingClientRect();
-    o.width = videoRect.width;
-    o.height = videoRect.height;
-
-    if (lastResult && now - lastResultTime < 3000) return; // 3s persistence
-
-    const det = await faceapi
-      .detectSingleFace(v, new faceapi.TinyFaceDetectorOptions({ scoreThreshold: 0.4 }))
-      .withFaceLandmarks()
-      .withFaceDescriptor();
-
-    const displaySize = { width: o.width, height: o.height };
-    faceapi.matchDimensions(o, displaySize);
-    ctx.clearRect(0, 0, o.width, o.height);
-    resultBox.innerHTML = "";
-
-    if (det) {
-      const resized = faceapi.resizeResults(det, displaySize);
-      const best = matcher.findBestMatch(det.descriptor);
-      const box = resized.detection.box;
-
-      // Draw bounding box
-      if (best.label === "unknown") {
-        ctx.strokeStyle = "red";
-        ctx.lineWidth = 3;
-        ctx.strokeRect(box.x, box.y, box.width, box.height);
-        ctx.fillStyle = "red";
-        ctx.font = "16px Arial";
-        ctx.fillText("Unrecognized", box.x, box.y - 10);
-
-        resultBox.innerHTML =
-          "<p style='color:red; font-weight:600;'>❌ Unrecognized face</p>";
-        lastResult = "unknown";
-      } else {
-        ctx.strokeStyle = "green";
-        ctx.lineWidth = 3;
-        ctx.strokeRect(box.x, box.y, box.width, box.height);
-        ctx.fillStyle = "green";
-        ctx.font = "16px Arial";
-        ctx.fillText(best.label, box.x, box.y - 10);
-
-        // Retrieve linked children
-        const parent = users.find((u) => u.name === best.label);
-        const link = links.find((l) => l.parentId === parent?.id);
-
-        if (link && link.childrenIds.length > 0) {
-          // ✅ Show all linked children correctly
-          const kids = link.childrenIds
-            .map((cid) => {
-              const c = children.find((ch) => ch.id === cid);
-              return c ? `<li>${c.name} (${c.class}-${c.section})</li>` : "";
-            })
-            .join("");
-
-          resultBox.innerHTML = `
-            <p style='color:green; font-weight:600;'>✅ Recognized: ${best.label}</p>
-            <p><strong>Linked Children:</strong></p>
-            <ul style="margin-left:10px; list-style-type:circle;">${kids}</ul>
-          `;
-        } else {
-          resultBox.innerHTML = `
-            <p style='color:orange; font-weight:600;'>✅ Recognized: ${best.label}</p>
-            <p>No linked children found</p>
-          `;
-        }
-        lastResult = best.label;
-      }
-
-      lastResultTime = now;
-    }
-  }, 500);
-}
-
-
-/* =====================================================
-   CLEANUP
-===================================================== */
-function clearIntervals() {
-  if (adminDetectInterval) clearInterval(adminDetectInterval);
-  if (recognitionInterval) clearInterval(recognitionInterval);
-}
-
-window.addEventListener("beforeunload", () => {
-  if (currentStream) currentStream.getTracks().forEach((t) => t.stop());
-  clearIntervals();
-});
