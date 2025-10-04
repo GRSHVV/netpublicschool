@@ -5,46 +5,59 @@
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Smart Pickup System</title>
   <link rel="stylesheet" href="style.css" />
+  <link rel="icon" href="icon-192.png" type="image/png" />
+
+  <!-- Face API and App Scripts -->
   <script defer src="face-api.min.js"></script>
   <script defer src="db.js"></script>
   <script defer src="index.js"></script>
 </head>
 <body>
   <div class="app-container">
-    
-    <!-- Camera Section -->
+
+    <!-- ================= Camera Section ================= -->
     <section class="camera-area" id="cameraArea">
       <video id="video" autoplay muted playsinline></video>
       <canvas id="overlay"></canvas>
       <div id="video-status" class="video-status">Initializing camera...</div>
     </section>
 
-    <!-- Menu / Control Panel -->
+    <!-- ================= Menu Panel ================= -->
     <aside class="menu-panel">
       <h2 class="app-title">Smart Pickup System</h2>
 
+      <!-- Camera Controls -->
       <div class="camera-controls">
         <label for="cameraSelect">Camera:</label>
         <select id="cameraSelect"></select>
         <button id="btnStartCamera" onclick="startCamera()">Start</button>
       </div>
 
+      <!-- Menu Buttons -->
       <div class="menu-buttons">
-        <button onclick="switchMode('admin')">Register Parent</button>
-        <button onclick="switchMode('child')">Register Child</button>
-        <button onclick="switchMode('link')">Link Parent-Child</button>
-        <button onclick="switchMode('recognition')">Recognize</button>
+        <button onclick="switchMode('admin')">👨‍👩‍👧 Register Parent</button>
+        <button onclick="switchMode('child')">🧒 Register Child</button>
+        <button onclick="switchMode('class')">🏫 Manage Classes</button>
+        <button onclick="switchMode('link')">🔗 Link Parent–Child</button>
+        <button onclick="switchMode('recognition')">🎥 Recognition</button>
       </div>
 
+      <!-- Status -->
       <div class="status-box">
         <strong>Status:</strong>
         <span id="statusMsg">Initializing...</span>
       </div>
 
+      <!-- Dynamic Content -->
       <div id="modeContent" class="mode-content">
         <p>Select a mode to begin.</p>
       </div>
     </aside>
   </div>
+
+  <!-- ================= Footer ================= -->
+  <footer class="footer">
+    <p>© 2025 Smart Pickup System | Powered by face-api.js + IndexedDB | Offline Ready</p>
+  </footer>
 </body>
 </html>

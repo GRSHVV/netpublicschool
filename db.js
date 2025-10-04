@@ -1,43 +1,61 @@
-// db.js — IndexedDB for Parents, Children, and Parent-Child Links
+// db.js — Full IndexedDB implementation for Smart Pickup System
+// Supports: Parents, Children, Links, Classes, Sections
 
 window.dbAPI = {
   db: null,
 
-  /* ===== Initialize / Open Database ===== */
+  /* ====== Initialize or Upgrade Database ====== */
   async openDB() {
     return new Promise((resolve, reject) => {
-      const request = indexedDB.open("FacePickupDB", 3);
+      const req = indexedDB.open("FacePickupDB", 4);
 
-      request.onupgradeneeded = (event) => {
+      req.onupgradeneeded = (event) => {
         const db = event.target.result;
 
-        // Create stores if not existing
+        // Parent data store (with face descriptor)
         if (!db.objectStoreNames.contains("users")) {
           db.createObjectStore("users", { keyPath: "id" });
         }
+
+        // Children data store
         if (!db.objectStoreNames.contains("children")) {
           db.createObjectStore("children", { keyPath: "id" });
         }
+
+        // Parent–Child link store
         if (!db.objectStoreNames.contains("links")) {
           db.createObjectStore("links", { keyPath: "parentId" });
         }
-        console.log("Database upgraded / created.");
+
+        // Classes data store
+        if (!db.objectStoreNames.contains("classes")) {
+          db.createObjectStore("classes", { keyPath: "id" });
+        }
+
+        // Sections data store
+        if (!db.objectStoreNames.contains("sections")) {
+          db.createObjectStore("sections", { keyPath: "id" });
+        }
+
+        console.log("✅ Database upgraded or created successfully.");
       };
 
-      request.onsuccess = (event) => {
+      req.onsuccess = (event) => {
         this.db = event.target.result;
         console.log("✅ Database opened successfully");
         resolve();
       };
 
-      request.onerror = (event) => {
-        console.error("❌ IndexedDB error:", event.target.error);
+      req.onerror = (event) => {
+        console.error("❌ Database error:", event.target.error);
         reject(event.target.error);
       };
     });
   },
 
-  /* ===== User (Parent) Operations ===== */
+  /* ============================================================
+   *                     USERS (PARENTS)
+   * ============================================================ */
   async addUser(user) {
     return new Promise((resolve, reject) => {
       const tx = this.db.transaction("users", "readwrite");
@@ -57,6 +75,15 @@ window.dbAPI = {
     });
   },
 
+  async getUserById(id) {
+    return new Promise((resolve) => {
+      const tx = this.db.transaction("users", "readonly");
+      const store = tx.objectStore("users");
+      const req = store.get(id);
+      req.onsuccess = () => resolve(req.result || null);
+    });
+  },
+
   async deleteUser(id) {
     return new Promise((resolve) => {
       const tx = this.db.transaction("users", "readwrite");
@@ -65,7 +92,9 @@ window.dbAPI = {
     });
   },
 
-  /* ===== Child Operations ===== */
+  /* ============================================================
+   *                     CHILDREN
+   * ============================================================ */
   async addChild(child) {
     return new Promise((resolve, reject) => {
       const tx = this.db.transaction("children", "readwrite");
@@ -85,6 +114,15 @@ window.dbAPI = {
     });
   },
 
+  async getChildById(id) {
+    return new Promise((resolve) => {
+      const tx = this.db.transaction("children", "readonly");
+      const store = tx.objectStore("children");
+      const req = store.get(id);
+      req.onsuccess = () => resolve(req.result || null);
+    });
+  },
+
   async deleteChild(id) {
     return new Promise((resolve) => {
       const tx = this.db.transaction("children", "readwrite");
@@ -93,7 +131,9 @@ window.dbAPI = {
     });
   },
 
-  /* ===== Parent ↔ Children Links ===== */
+  /* ============================================================
+   *                     LINKS (Parent ↔ Children)
+   * ============================================================ */
   async linkParentChildren(parentId, childrenIds) {
     return new Promise((resolve, reject) => {
       const tx = this.db.transaction("links", "readwrite");
@@ -131,13 +171,77 @@ window.dbAPI = {
     });
   },
 
-  /* ===== Utility: Clear All (for testing/reset) ===== */
+  /* ============================================================
+   *                     CLASSES
+   * ============================================================ */
+  async addClass(name) {
+    return new Promise((resolve, reject) => {
+      const tx = this.db.transaction("classes", "readwrite");
+      const store = tx.objectStore("classes");
+      const id = Date.now().toString();
+      const req = store.put({ id, name });
+      req.onsuccess = () => resolve(id);
+      req.onerror = (e) => reject(e);
+    });
+  },
+
+  async getAllClasses() {
+    return new Promise((resolve) => {
+      const tx = this.db.transaction("classes", "readonly");
+      const store = tx.objectStore("classes");
+      const req = store.getAll();
+      req.onsuccess = () => resolve(req.result || []);
+    });
+  },
+
+  async deleteClass(id) {
+    return new Promise((resolve) => {
+      const tx = this.db.transaction("classes", "readwrite");
+      tx.objectStore("classes").delete(id);
+      tx.oncomplete = () => resolve();
+    });
+  },
+
+  /* ============================================================
+   *                     SECTIONS
+   * ============================================================ */
+  async addSection(name) {
+    return new Promise((resolve, reject) => {
+      const tx = this.db.transaction("sections", "readwrite");
+      const store = tx.objectStore("sections");
+      const id = Date.now().toString();
+      const req = store.put({ id, name });
+      req.onsuccess = () => resolve(id);
+      req.onerror = (e) => reject(e);
+    });
+  },
+
+  async getAllSections() {
+    return new Promise((resolve) => {
+      const tx = this.db.transaction("sections", "readonly");
+      const store = tx.objectStore("sections");
+      const req = store.getAll();
+      req.onsuccess = () => resolve(req.result || []);
+    });
+  },
+
+  async deleteSection(id) {
+    return new Promise((resolve) => {
+      const tx = this.db.transaction("sections", "readwrite");
+      tx.objectStore("sections").delete(id);
+      tx.oncomplete = () => resolve();
+    });
+  },
+
+  /* ============================================================
+   *                     UTILITIES
+   * ============================================================ */
   async clearAll() {
-    const stores = ["users", "children", "links"];
+    const stores = ["users", "children", "links", "classes", "sections"];
     for (const s of stores) {
       const tx = this.db.transaction(s, "readwrite");
       tx.objectStore(s).clear();
     }
-    console.log("✅ Cleared all data");
+    console.log("✅ Cleared all data stores.");
   },
 };

@@ -1,203 +1,317 @@
-/* ===== Global ===== */
+/* ========================================
+   GLOBAL STYLES
+======================================== */
 * {
   box-sizing: border-box;
-}
-body {
   margin: 0;
-  font-family: "Segoe UI", Roboto, sans-serif;
-  background: #f5f8fb;
-  color: #222;
-  height: 100vh;
-  overflow: hidden;
+  padding: 0;
+  font-family: "Inter", Arial, sans-serif;
 }
 
-/* ===== Layout ===== */
+html, body {
+  height: 100%;
+  width: 100%;
+  background-color: #f4f6f8;
+  color: #222;
+}
+
 .app-container {
   display: flex;
   flex-direction: row;
-  width: 100vw;
   height: 100vh;
+  width: 100%;
+  overflow: hidden;
 }
 
-/* ===== Camera Section ===== */
+/* ========================================
+   CAMERA AREA
+======================================== */
 .camera-area {
   position: relative;
   flex: 1 1 70%;
-  background: #000;
+  background-color: #000;
   display: flex;
   align-items: center;
   justify-content: center;
-  transition: all 0.4s ease;
+  overflow: hidden;
 }
+
+.camera-area video {
+  width: 100%;
+  height: auto;
+  max-height: 100%;
+  border-radius: 8px;
+  object-fit: cover;
+}
+
+.camera-area canvas {
+  position: absolute;
+  top: 0;
+  left: 0;
+}
+
 .camera-hidden {
   display: none !important;
 }
-video,
-canvas {
-  position: absolute;
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-}
+
 .video-status {
   position: absolute;
   bottom: 10px;
   left: 10px;
-  padding: 6px 10px;
-  background: rgba(0, 0, 0, 0.6);
-  color: white;
+  color: #fff;
+  background: rgba(0,0,0,0.5);
+  padding: 6px 12px;
   border-radius: 6px;
-  font-size: 0.9rem;
+  font-size: 14px;
 }
 
-/* ===== Control Panel ===== */
+/* ========================================
+   MENU PANEL
+======================================== */
 .menu-panel {
-  width: 350px;
-  background: #ffffff;
-  box-shadow: -4px 0 12px rgba(0, 0, 0, 0.08);
+  flex: 1 1 30%;
+  background-color: #ffffff;
+  border-left: 3px solid #ddd;
+  padding: 12px 16px;
   display: flex;
   flex-direction: column;
-  padding: 16px;
+  justify-content: flex-start;
   overflow-y: auto;
 }
-.app-title {
-  margin: 0 0 12px;
-  text-align: center;
-  color: #1976d2;
-  font-size: 1.4rem;
-  font-weight: 700;
-}
 
-/* ===== Camera Controls ===== */
-.camera-controls {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  margin-bottom: 12px;
-}
-.camera-controls select {
-  flex: 1;
-  padding: 6px 8px;
-  border-radius: 6px;
-  border: 1px solid #ccc;
-}
-.camera-controls button {
-  background: #2e7d32;
-  color: white;
-  border: none;
-  border-radius: 6px;
-  padding: 7px 10px;
-  cursor: pointer;
+.app-title {
+  font-size: 1.3em;
+  text-align: center;
+  color: #1e3a8a;
+  margin-bottom: 10px;
   font-weight: 600;
 }
 
-/* ===== Menu Buttons ===== */
+.camera-controls {
+  display: flex;
+  flex-direction: column;
+  margin-bottom: 10px;
+  gap: 6px;
+}
+
+.camera-controls label {
+  font-weight: 500;
+  color: #333;
+}
+
+.camera-controls select,
+.camera-controls button {
+  padding: 8px;
+  font-size: 14px;
+  border-radius: 6px;
+  border: 1px solid #ccc;
+}
+
+.camera-controls button {
+  background: #1e3a8a;
+  color: #fff;
+  border: none;
+  cursor: pointer;
+  transition: background 0.2s ease-in-out;
+}
+
+.camera-controls button:hover {
+  background: #3749b5;
+}
+
+/* ========================================
+   MENU BUTTONS
+======================================== */
 .menu-buttons {
   display: flex;
   flex-direction: column;
   gap: 8px;
-  margin-bottom: 12px;
-}
-.menu-buttons button {
-  background: #1976d2;
-  color: white;
-  border: none;
-  border-radius: 6px;
-  padding: 10px;
-  font-weight: 600;
-  cursor: pointer;
-}
-.menu-buttons button:hover {
-  background: #0d47a1;
+  margin: 10px 0;
 }
 
-/* ===== Status Box ===== */
+.menu-buttons button {
+  background-color: #2563eb;
+  color: #fff;
+  border: none;
+  border-radius: 6px;
+  padding: 10px 8px;
+  font-size: 15px;
+  cursor: pointer;
+  transition: background 0.2s ease-in-out;
+}
+
+.menu-buttons button:hover {
+  background-color: #1d4ed8;
+}
+
+/* ========================================
+   STATUS + CONTENT AREA
+======================================== */
 .status-box {
   background: #f1f5f9;
   border-radius: 6px;
   padding: 8px;
-  margin-bottom: 12px;
-  font-size: 0.9rem;
+  margin: 8px 0;
+  font-size: 14px;
+  color: #333;
 }
 
-/* ===== Forms ===== */
+.mode-content {
+  background: #fafafa;
+  border-radius: 8px;
+  padding: 12px;
+  margin-top: 6px;
+  flex-grow: 1;
+  overflow-y: auto;
+}
+
+.mode-content h3 {
+  color: #1e3a8a;
+  margin-bottom: 10px;
+  border-bottom: 2px solid #cbd5e1;
+  padding-bottom: 4px;
+}
+
+/* ========================================
+   FORM ELEMENTS
+======================================== */
 .form-group {
+  display: flex;
+  flex-direction: column;
   margin-bottom: 10px;
 }
+
 .form-group label {
-  display: block;
-  font-weight: 600;
+  font-weight: 500;
   margin-bottom: 4px;
-}
-input,
-select {
-  width: 100%;
-  padding: 8px;
-  border-radius: 6px;
-  border: 1px solid #ccc;
+  color: #222;
 }
 
-/* ===== Buttons ===== */
+.form-group input,
+.form-group select {
+  padding: 8px;
+  border: 1px solid #cbd5e1;
+  border-radius: 6px;
+  font-size: 14px;
+  outline: none;
+}
+
+.form-group input:focus,
+.form-group select:focus {
+  border-color: #2563eb;
+}
+
+/* ========================================
+   BUTTONS
+======================================== */
 button.primary {
-  width: 100%;
-  padding: 10px;
-  background: #43a047;
+  background-color: #2563eb;
   color: white;
   border: none;
+  padding: 10px 14px;
   border-radius: 6px;
-  font-weight: 700;
+  font-size: 15px;
   cursor: pointer;
-}
-button.primary:disabled {
-  background: #cfd8dc;
-  cursor: not-allowed;
+  transition: all 0.3s ease-in-out;
 }
 
-/* ===== Lists ===== */
-ul {
-  list-style: none;
-  margin: 0;
-  padding: 0;
+button.primary:hover {
+  background-color: #1d4ed8;
 }
-.list-item {
-  background: #fafafa;
+
+button.danger {
+  background-color: #dc2626;
+  color: white;
+  border: none;
+  padding: 6px 10px;
   border-radius: 6px;
+  cursor: pointer;
+  font-size: 13px;
+}
+
+button.danger:hover {
+  background-color: #b91c1c;
+}
+
+/* ========================================
+   LISTS + RESULTS
+======================================== */
+.list-item {
+  background-color: #f9fafb;
   padding: 6px 8px;
+  border: 1px solid #e5e7eb;
+  border-radius: 6px;
   margin-bottom: 6px;
+  font-size: 14px;
   display: flex;
   justify-content: space-between;
   align-items: center;
 }
-.action-buttons {
-  display: flex;
-  gap: 6px;
-}
-.edit-btn {
-  background: #ffa000;
-  color: white;
-  border: none;
+
+.result-box {
+  margin-top: 8px;
+  background: #f3f4f6;
+  padding: 10px;
   border-radius: 6px;
-  padding: 4px 8px;
-}
-.danger {
-  background: #e53935;
-  color: white;
-  border: none;
-  border-radius: 6px;
-  padding: 4px 8px;
+  border: 1px solid #e5e7eb;
+  font-size: 15px;
+  color: #111;
 }
 
-/* ===== Responsive ===== */
-@media (max-width: 900px), (orientation: portrait) {
+/* ========================================
+   FOOTER
+======================================== */
+.footer {
+  background-color: #1e3a8a;
+  color: #fff;
+  text-align: center;
+  padding: 10px 6px;
+  font-size: 13px;
+  position: fixed;
+  bottom: 0;
+  width: 100%;
+}
+
+/* ========================================
+   RESPONSIVE DESIGN
+======================================== */
+@media (max-width: 900px) {
   .app-container {
     flex-direction: column;
   }
+
   .camera-area {
-    width: 100%;
-    height: 60vh;
+    flex: 1 1 auto;
+    height: 50vh;
   }
+
   .menu-panel {
+    flex: 1 1 auto;
+    height: 50vh;
+    border-left: none;
+    border-top: 3px solid #ddd;
+  }
+
+  .menu-buttons button {
+    font-size: 14px;
+  }
+
+  .form-group input,
+  .form-group select {
+    font-size: 13px;
+  }
+}
+
+@media (orientation: portrait) {
+  .camera-area video {
     width: 100%;
-    height: 40vh;
+    height: auto;
+  }
+}
+
+@media (orientation: landscape) {
+  .camera-area video {
+    height: 100%;
+    width: auto;
   }
 }

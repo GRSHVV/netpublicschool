@@ -1,4 +1,5 @@
-// index.js — Final version with linked children display on recognition
+// index.js — Smart Pickup System
+// Full version with 3-second persistent bounding box for registration and recognition
 
 let currentMode = null;
 let modelsLoaded = false;
@@ -6,15 +7,20 @@ let currentStream = null;
 let adminDetectInterval = null;
 let recognitionInterval = null;
 let lastDetection = null;
+let lastDrawTime = 0;
 let videoDevices = [];
 
-/* ===== Status ===== */
+/* =====================================================
+   STATUS HANDLER
+===================================================== */
 function setStatus(msg) {
   document.getElementById("statusMsg").textContent = msg;
   console.log("[STATUS]", msg);
 }
 
-/* ===== Load Models ===== */
+/* =====================================================
+   MODEL LOADING
+===================================================== */
 async function loadModels() {
   setStatus("Loading models...");
   await Promise.all([
@@ -26,10 +32,13 @@ async function loadModels() {
   setStatus("Models loaded ✅");
 }
 
-/* ===== Camera Setup ===== */
+/* =====================================================
+   CAMERA SETUP
+===================================================== */
 async function ensureCameraPermission() {
   await navigator.mediaDevices.getUserMedia({ video: true });
 }
+
 async function getVideoDevices() {
   const devices = await navigator.mediaDevices.enumerateDevices();
   videoDevices = devices.filter((d) => d.kind === "videoinput");
@@ -43,6 +52,7 @@ async function getVideoDevices() {
   });
   select.onchange = (e) => startCameraById(e.target.value);
 }
+
 async function startCameraById(deviceId) {
   if (currentStream) currentStream.getTracks().forEach((t) => t.stop());
   const stream = await navigator.mediaDevices.getUserMedia({
@@ -53,6 +63,7 @@ async function startCameraById(deviceId) {
   v.srcObject = stream;
   v.onloadedmetadata = () => v.play();
 }
+
 async function startCamera() {
   await ensureCameraPermission();
   await getVideoDevices();
@@ -60,7 +71,6 @@ async function startCamera() {
   if (id) await startCameraById(id);
 }
 
-/* ===== Resize Canvas ===== */
 function resizeOverlay() {
   const v = document.getElementById("video");
   const c = document.getElementById("overlay");
@@ -68,7 +78,9 @@ function resizeOverlay() {
   c.height = v.offsetHeight;
 }
 
-/* ===== Init ===== */
+/* =====================================================
+   INITIALIZATION
+===================================================== */
 document.addEventListener("DOMContentLoaded", async () => {
   await window.dbAPI.openDB();
   await loadModels();
@@ -77,16 +89,19 @@ document.addEventListener("DOMContentLoaded", async () => {
   switchMode("admin");
 });
 
-/* ===== Mode Switch ===== */
+/* =====================================================
+   MODE SWITCHER
+===================================================== */
 function switchMode(mode) {
   currentMode = mode;
   clearIntervals();
   const camera = document.getElementById("cameraArea");
   const c = document.getElementById("modeContent");
 
-  if (mode === "child") camera.classList.add("camera-hidden");
+  if (["child", "class"].includes(mode)) camera.classList.add("camera-hidden");
   else camera.classList.remove("camera-hidden");
 
+  /* ---------------- Parent Registration ---------------- */
   if (mode === "admin") {
     c.innerHTML = `
       <h3>Register Parent</h3>
@@ -102,31 +117,74 @@ function switchMode(mode) {
     loadParents();
   }
 
+  /* ---------------- Child Registration ---------------- */
   if (mode === "child") {
     c.innerHTML = `
       <h3>Register Child</h3>
       <div class="form-group"><label>Child Name</label><input id="childName" /></div>
-      <div class="form-group"><label>Class</label><input id="childClass" /></div>
-      <div class="form-group"><label>Section</label><input id="childSection" /></div>
+      <div class="form-group"><label>Class</label><select id="childClass"></select></div>
+      <div class="form-group"><label>Section</label><select id="childSection"></select></div>
       <button id="addChildBtn" class="primary">Add Child</button>
       <ul id="childList"></ul>
     `;
+    loadClassSectionOptions("childClass", "childSection");
     document.getElementById("addChildBtn").addEventListener("click", addChild);
     loadChildren();
   }
 
+  /* ---------------- Class & Section Management ---------------- */
+  if (mode === "class") {
+    c.innerHTML = `
+      <h3>Manage Classes & Sections</h3>
+      <div class="form-group"><label>Add Class</label>
+        <input id="className" placeholder="e.g. 10th" />
+        <button id="addClassBtn" class="primary">Add</button>
+      </div>
+      <ul id="classList"></ul>
+
+      <hr>
+
+      <div class="form-group"><label>Add Section</label>
+        <input id="sectionName" placeholder="e.g. A" />
+        <button id="addSectionBtn" class="primary">Add</button>
+      </div>
+      <ul id="sectionList"></ul>
+    `;
+    document.getElementById("addClassBtn").addEventListener("click", addClass);
+    document.getElementById("addSectionBtn").addEventListener("click", addSection);
+    loadClassList();
+    loadSectionList();
+  }
+
+  /* ---------------- Parent–Child Linking ---------------- */
   if (mode === "link") {
     c.innerHTML = `
       <h3>Link Parents & Children</h3>
-      <label>Parent</label><select id="parentSelect"></select>
-      <label>Children</label><select id="childrenSelect" multiple></select>
+      <div class="form-group">
+        <label>Search Parent (min 3 letters)</label>
+        <input id="parentSearch" placeholder="Type parent name..." />
+        <select id="parentSelect"></select>
+      </div>
+      <div class="form-group">
+        <label>Filter Children</label>
+        <select id="linkClass"></select>
+        <select id="linkSection"></select>
+      </div>
+      <div class="form-group">
+        <label>Search Child (min 3 letters)</label>
+        <input id="childSearch" placeholder="Type child name..." />
+        <select id="childrenSelect" multiple></select>
+      </div>
       <button id="linkBtn" class="primary">Link</button>
       <ul id="linkList"></ul>
     `;
+    loadClassSectionOptions("linkClass", "linkSection");
+    setupLinkSearchHandlers();
     document.getElementById("linkBtn").addEventListener("click", linkParentChild);
-    loadLinkData();
+    loadLinks();
   }
 
+  /* ---------------- Recognition ---------------- */
   if (mode === "recognition") {
     c.innerHTML = `
       <h3>Recognition</h3>
@@ -136,13 +194,9 @@ function switchMode(mode) {
   }
 }
 
-/* ===== Clear Loops ===== */
-function clearIntervals() {
-  if (adminDetectInterval) clearInterval(adminDetectInterval);
-  if (recognitionInterval) clearInterval(recognitionInterval);
-}
-
-/* ===== Parent Detection ===== */
+/* =====================================================
+   FACE DETECTION (3-second persistence)
+===================================================== */
 function detectParentFace() {
   const v = document.getElementById("video");
   const o = document.getElementById("overlay");
@@ -151,6 +205,11 @@ function detectParentFace() {
 
   adminDetectInterval = setInterval(async () => {
     if (!modelsLoaded || !v.videoWidth) return;
+    const now = Date.now();
+
+    // Keep existing bounding box for 3 seconds
+    if (lastDetection && now - lastDrawTime < 3000) return;
+
     const detection = await faceapi
       .detectSingleFace(v, new faceapi.TinyFaceDetectorOptions({ scoreThreshold: 0.5 }))
       .withFaceLandmarks()
@@ -164,16 +223,21 @@ function detectParentFace() {
       const resized = faceapi.resizeResults(detection, displaySize);
       faceapi.draw.drawDetections(o, resized);
       lastDetection = detection;
-      const name = document.getElementById("username").value.trim();
-      btn.disabled = !name;
+      lastDrawTime = now;
+      btn.disabled = !document.getElementById("username").value.trim();
     } else {
-      lastDetection = null;
-      btn.disabled = true;
+      if (now - lastDrawTime >= 3000) {
+        ctx.clearRect(0, 0, o.width, o.height);
+        lastDetection = null;
+        btn.disabled = true;
+      }
     }
-  }, 400);
+  }, 300);
 }
 
-/* ===== Register Parent ===== */
+/* =====================================================
+   REGISTER PARENT
+===================================================== */
 async function registerUser() {
   const name = document.getElementById("username").value.trim();
   const role = document.getElementById("role").value;
@@ -184,13 +248,16 @@ async function registerUser() {
   alert("Parent registered!");
   loadParents();
 }
+
 async function loadParents() {
   const p = await window.dbAPI.getAllUsers();
   const list = document.getElementById("userList");
   list.innerHTML = p.map((x) => `<li class='list-item'>${x.name} (${x.role})</li>`).join("");
 }
 
-/* ===== Child Register ===== */
+/* =====================================================
+   REGISTER CHILD
+===================================================== */
 async function addChild() {
   const name = document.getElementById("childName").value.trim();
   const cls = document.getElementById("childClass").value.trim();
@@ -200,43 +267,132 @@ async function addChild() {
   alert("Child added!");
   loadChildren();
 }
+
 async function loadChildren() {
   const c = await window.dbAPI.getAllChildren();
   const list = document.getElementById("childList");
   list.innerHTML = c.map((x) => `<li class='list-item'>${x.name} (${x.class}-${x.section})</li>`).join("");
 }
 
-/* ===== Linking ===== */
-async function loadLinkData() {
-  const ps = document.getElementById("parentSelect");
-  const cs = document.getElementById("childrenSelect");
-  ps.innerHTML = "";
-  cs.innerHTML = "";
-  const parents = await window.dbAPI.getAllUsers();
-  const children = await window.dbAPI.getAllChildren();
-  parents.forEach((p) => {
-    const o = document.createElement("option");
-    o.value = p.id;
-    o.textContent = p.name;
-    ps.appendChild(o);
-  });
-  children.forEach((ch) => {
-    const o = document.createElement("option");
-    o.value = ch.id;
-    o.textContent = `${ch.name} (${ch.class}-${ch.section})`;
-    cs.appendChild(o);
-  });
-  loadLinks();
+/* =====================================================
+   CLASS & SECTION MANAGEMENT
+===================================================== */
+async function addClass() {
+  const name = document.getElementById("className").value.trim();
+  if (!name) return alert("Enter class name");
+  await window.dbAPI.addClass(name);
+  document.getElementById("className").value = "";
+  loadClassList();
 }
+
+async function addSection() {
+  const name = document.getElementById("sectionName").value.trim();
+  if (!name) return alert("Enter section name");
+  await window.dbAPI.addSection(name);
+  document.getElementById("sectionName").value = "";
+  loadSectionList();
+}
+
+async function loadClassList() {
+  const list = document.getElementById("classList");
+  const classes = await window.dbAPI.getAllClasses();
+  list.innerHTML = classes
+    .map(
+      (x) => `<li class='list-item'>${x.name}
+        <button class='danger' onclick="deleteClass('${x.id}')">Delete</button></li>`
+    )
+    .join("");
+}
+
+async function loadSectionList() {
+  const list = document.getElementById("sectionList");
+  const sections = await window.dbAPI.getAllSections();
+  list.innerHTML = sections
+    .map(
+      (x) => `<li class='list-item'>${x.name}
+        <button class='danger' onclick="deleteSection('${x.id}')">Delete</button></li>`
+    )
+    .join("");
+}
+
+async function deleteClass(id) {
+  await window.dbAPI.deleteClass(id);
+  loadClassList();
+}
+async function deleteSection(id) {
+  await window.dbAPI.deleteSection(id);
+  loadSectionList();
+}
+
+async function loadClassSectionOptions(classId, sectionId) {
+  const classSelect = document.getElementById(classId);
+  const sectionSelect = document.getElementById(sectionId);
+  const classes = await window.dbAPI.getAllClasses();
+  const sections = await window.dbAPI.getAllSections();
+  classSelect.innerHTML = classes.map((c) => `<option>${c.name}</option>`).join("");
+  sectionSelect.innerHTML = sections.map((s) => `<option>${s.name}</option>`).join("");
+}
+
+/* =====================================================
+   PARENT–CHILD LINKING
+===================================================== */
+async function setupLinkSearchHandlers() {
+  const parentInput = document.getElementById("parentSearch");
+  const parentSelect = document.getElementById("parentSelect");
+  const childInput = document.getElementById("childSearch");
+  const classSelect = document.getElementById("linkClass");
+  const sectionSelect = document.getElementById("linkSection");
+  const childSelect = document.getElementById("childrenSelect");
+
+  parentInput.oninput = async () => {
+    const term = parentInput.value.trim().toLowerCase();
+    const parents = await window.dbAPI.getAllUsers();
+    parentSelect.innerHTML = "";
+    if (term.length >= 3) {
+      const filtered = parents.filter((p) => p.name.toLowerCase().startsWith(term));
+      filtered.forEach((p) => {
+        const opt = document.createElement("option");
+        opt.value = p.id;
+        opt.textContent = `${p.name} (${p.role})`;
+        parentSelect.appendChild(opt);
+      });
+    }
+  };
+
+  const updateChildList = async () => {
+    const term = childInput.value.trim().toLowerCase();
+    const cls = classSelect.value.trim().toLowerCase();
+    const sec = sectionSelect.value.trim().toLowerCase();
+    const allChildren = await window.dbAPI.getAllChildren();
+    childSelect.innerHTML = "";
+    const filtered = allChildren.filter((ch) => {
+      const matchName = term.length >= 3 ? ch.name.toLowerCase().startsWith(term) : true;
+      const matchClass = cls ? ch.class.toLowerCase() === cls : true;
+      const matchSec = sec ? ch.section.toLowerCase() === sec : true;
+      return matchName && matchClass && matchSec;
+    });
+    filtered.forEach((c) => {
+      const opt = document.createElement("option");
+      opt.value = c.id;
+      opt.textContent = `${c.name} (${c.class}-${c.section})`;
+      childSelect.appendChild(opt);
+    });
+  };
+
+  [childInput, classSelect, sectionSelect].forEach((el) => (el.oninput = updateChildList));
+}
+
 async function linkParentChild() {
   const pid = document.getElementById("parentSelect").value;
   const cs = Array.from(document.getElementById("childrenSelect").selectedOptions).map(
     (o) => o.value
   );
+  if (!pid || !cs.length) return alert("Select parent and at least one child.");
   await window.dbAPI.linkParentChildren(pid, cs);
   alert("Linked successfully!");
   loadLinks();
 }
+
 async function loadLinks() {
   const list = document.getElementById("linkList");
   const links = await window.dbAPI.getAllLinks();
@@ -253,7 +409,9 @@ async function loadLinks() {
   });
 }
 
-/* ===== Recognition Mode with Linked Children Display ===== */
+/* =====================================================
+   RECOGNITION (with 3-second persistence)
+===================================================== */
 async function startRecognition() {
   const users = await window.dbAPI.getAllUsers();
   const links = await window.dbAPI.getAllLinks();
@@ -270,8 +428,17 @@ async function startRecognition() {
   const ctx = o.getContext("2d");
   const resultBox = document.getElementById("recognitionResult");
 
+  let lastResultTime = 0;
+  let lastResult = null;
+
   recognitionInterval = setInterval(async () => {
     if (!modelsLoaded || !v.videoWidth) return;
+    const now = Date.now();
+
+    if (lastResult && now - lastResultTime < 3000) {
+      return; // keep old result for 3s
+    }
+
     const det = await faceapi
       .detectSingleFace(v, new faceapi.TinyFaceDetectorOptions({ scoreThreshold: 0.5 }))
       .withFaceLandmarks()
@@ -296,6 +463,7 @@ async function startRecognition() {
         ctx.fillText("Unrecognized", box.x, box.y - 10);
         resultBox.innerHTML =
           "<p style='color:red; font-weight:600;'>❌ Unrecognized face</p>";
+        lastResult = "unknown";
       } else {
         ctx.strokeStyle = "green";
         ctx.lineWidth = 3;
@@ -304,7 +472,6 @@ async function startRecognition() {
         ctx.font = "16px Arial";
         ctx.fillText(best.label, box.x, box.y - 10);
 
-        // Find linked children
         const parent = users.find((u) => u.name === best.label);
         const link = links.find((l) => l.parentId === parent?.id);
         if (link && link.childrenIds.length > 0) {
@@ -324,12 +491,21 @@ async function startRecognition() {
             <p>No linked children found</p>
           `;
         }
+        lastResult = best.label;
       }
+      lastResultTime = now;
     }
-  }, 600);
+  }, 400);
 }
 
-/* ===== Cleanup ===== */
+/* =====================================================
+   CLEANUP
+===================================================== */
+function clearIntervals() {
+  if (adminDetectInterval) clearInterval(adminDetectInterval);
+  if (recognitionInterval) clearInterval(recognitionInterval);
+}
+
 window.addEventListener("beforeunload", () => {
   if (currentStream) currentStream.getTracks().forEach((t) => t.stop());
   clearIntervals();
