@@ -26,9 +26,11 @@
       </div>
 
       <div class="camera-controls">
-        <button id="btnStartCamera" onclick="startCamera()">Start Camera</button>
-        <button id="btnFlipCamera" onclick="flipCamera()">Flip Camera</button>
-      </div>
+  		<label for="cameraSelect"><strong>Camera:</strong></label>
+  		<select id="cameraSelect"></select>
+  		<button id="btnStartCamera" onclick="startCamera()">Start Camera</button>
+	</div>
+
 
       <div id="statusBox" class="status-box">
         <strong>Status:</strong> <span id="statusMsg">Initializing...</span>

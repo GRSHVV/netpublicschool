@@ -1,4 +1,4 @@
-// index.js - main logic with camera flip support
+// index.js — version with camera dropdown selector
 
 let currentMode = null;
 let modelsLoaded = false;
@@ -6,7 +6,9 @@ let currentStream = null;
 let adminDetectInterval = null;
 let recognitionInterval = null;
 let lastDetection = null;
-let currentFacingMode = "environment"; // Default rear camera
+
+let videoDevices = [];
+let activeCamera = null;
 
 function setStatus(msg) {
   const el = document.getElementById("statusMsg");
@@ -14,31 +16,74 @@ function setStatus(msg) {
   console.log("[STATUS]", msg);
 }
 
-/* ===== Load models ===== */
+/* ===== Load face-api models ===== */
 async function loadModels() {
   try {
     setStatus("Loading models...");
     await Promise.all([
       faceapi.nets.tinyFaceDetector.loadFromUri("models"),
       faceapi.nets.faceLandmark68Net.loadFromUri("models"),
-      faceapi.nets.faceRecognitionNet.loadFromUri("models")
+      faceapi.nets.faceRecognitionNet.loadFromUri("models"),
     ]);
     modelsLoaded = true;
     setStatus("Models loaded ✅");
   } catch (err) {
     console.error("Model load error", err);
-    setStatus("Error loading models. See console.");
+    setStatus("Error loading models (see console)");
   }
 }
 
-/* ===== Start camera ===== */
-async function startCamera(facingMode = currentFacingMode) {
+/* ===== Enumerate and list cameras ===== */
+async function getVideoDevices() {
   try {
-    if (currentStream) currentStream.getTracks().forEach(t => t.stop());
+    const devices = await navigator.mediaDevices.enumerateDevices();
+    videoDevices = devices.filter((d) => d.kind === "videoinput");
+    console.log("🎥 Cameras detected:", videoDevices);
 
-    const constraints = { video: { facingMode } };
+    const dropdown = document.getElementById("cameraSelect");
+    dropdown.innerHTML = "";
+
+    if (videoDevices.length === 0) {
+      const opt = document.createElement("option");
+      opt.textContent = "No camera found";
+      dropdown.appendChild(opt);
+      return;
+    }
+
+    // Build options
+    videoDevices.forEach((device, i) => {
+      const option = document.createElement("option");
+      option.value = device.deviceId;
+      const label = device.label || `Camera ${i + 1}`;
+      option.textContent = /front|user/i.test(label)
+        ? "Front Camera"
+        : /back|rear|environment/i.test(label)
+        ? "Back Camera"
+        : label;
+      dropdown.appendChild(option);
+    });
+
+    dropdown.onchange = async (e) => {
+      const selectedId = e.target.value;
+      await startCameraById(selectedId);
+    };
+  } catch (err) {
+    console.error("enumerateDevices error", err);
+  }
+}
+
+/* ===== Start camera by specific deviceId ===== */
+async function startCameraById(deviceId) {
+  try {
+    if (currentStream) currentStream.getTracks().forEach((t) => t.stop());
+
+    const constraints = deviceId
+      ? { video: { deviceId: { exact: deviceId } } }
+      : { video: { facingMode: "environment" } };
+
     const stream = await navigator.mediaDevices.getUserMedia(constraints);
     currentStream = stream;
+    activeCamera = deviceId;
 
     const video = document.getElementById("video");
     video.srcObject = stream;
@@ -46,25 +91,33 @@ async function startCamera(facingMode = currentFacingMode) {
     video.onloadedmetadata = () => {
       video.play().catch(() => {});
       resizeOverlay();
-      setStatus(`Camera started (${facingMode === "user" ? "Front" : "Back"})`);
-      document.getElementById("video-status").style.display = "none";
+      const label =
+        videoDevices.find((d) => d.deviceId === deviceId)?.label || "Camera";
+      setStatus(`Camera active: ${label}`);
+      const vs = document.getElementById("video-status");
+      if (vs) vs.style.display = "none";
     };
   } catch (err) {
-    console.error("Camera error", err);
-    setStatus("Camera start failed. Check permissions.");
+    console.error("startCameraById error", err);
+    setStatus("Camera failed. Check permissions.");
   }
 }
 
-/* ===== Flip Camera ===== */
-async function flipCamera() {
-  try {
-    currentFacingMode = currentFacingMode === "user" ? "environment" : "user";
-    setStatus(`Switching to ${currentFacingMode === "user" ? "Front" : "Back"} camera...`);
-    await startCamera(currentFacingMode);
-  } catch (err) {
-    console.error("Flip camera error", err);
-    setStatus("Failed to flip camera.");
-  }
+/* ===== Initialize first camera ===== */
+async function startCamera() {
+  await getVideoDevices();
+  if (videoDevices.length === 0) return;
+
+  const defaultDevice = videoDevices.find((d) =>
+    /back|rear|environment/i.test(d.label)
+  )
+    ? videoDevices.find((d) =>
+        /back|rear|environment/i.test(d.label)
+      ).deviceId
+    : videoDevices[0].deviceId;
+
+  document.getElementById("cameraSelect").value = defaultDevice;
+  await startCameraById(defaultDevice);
 }
 
 /* ===== Resize overlay ===== */
@@ -76,15 +129,15 @@ function resizeOverlay() {
   canvas.height = video.videoHeight || canvas.clientHeight;
 }
 
-/* ===== Initialize ===== */
+/* ===== Initialize app ===== */
 document.addEventListener("DOMContentLoaded", async () => {
   await window.dbAPI.openDB();
   await loadModels();
-  await startCamera(); // default back cam
-  switchMode("admin"); // default to register
+  await startCamera();
+  switchMode("admin");
 });
 
-/* ===== Mode switch ===== */
+/* ===== Mode switching ===== */
 function switchMode(mode) {
   currentMode = mode;
   clearDetectionLoops();
@@ -103,7 +156,9 @@ function switchMode(mode) {
       <button id="registerBtn" disabled>Register</button>
       <h4>Registered Users</h4><ul id="userList"></ul>
     `;
-    document.getElementById("registerBtn").addEventListener("click", registerFace);
+    document
+      .getElementById("registerBtn")
+      .addEventListener("click", registerFace);
     document.getElementById("username").addEventListener("input", () => {
       const nameOk = document.getElementById("username").value.trim().length > 0;
       const btn = document.getElementById("registerBtn");
@@ -122,7 +177,7 @@ function switchMode(mode) {
   }
 }
 
-/* ===== Detection Loops ===== */
+/* ===== Stop intervals ===== */
 function clearDetectionLoops() {
   if (adminDetectInterval) clearInterval(adminDetectInterval);
   if (recognitionInterval) clearInterval(recognitionInterval);
@@ -147,7 +202,10 @@ function startLiveDetection() {
     }
 
     const detection = await faceapi
-      .detectSingleFace(video, new faceapi.TinyFaceDetectorOptions({ inputSize, scoreThreshold: threshold }))
+      .detectSingleFace(
+        video,
+        new faceapi.TinyFaceDetectorOptions({ inputSize, scoreThreshold: threshold })
+      )
       .withFaceLandmarks()
       .withFaceDescriptor();
 
@@ -160,7 +218,9 @@ function startLiveDetection() {
       ctx.strokeRect(box.x, box.y, box.width, box.height);
       lastDetection = detection;
 
-      const namePresent = document.getElementById("username").value.trim().length > 0;
+      const namePresent = document
+        .getElementById("username")
+        .value.trim().length > 0;
       btn.disabled = !namePresent ? true : false;
     } else {
       lastDetection = null;
@@ -169,11 +229,12 @@ function startLiveDetection() {
   }, 400);
 }
 
-/* ===== Register face ===== */
+/* ===== Register Face ===== */
 async function registerFace() {
   const name = document.getElementById("username").value.trim();
   const role = document.getElementById("role").value;
-  if (!name || !lastDetection) return alert("Please show your face and enter name first.");
+  if (!name || !lastDetection)
+    return alert("Please show your face and enter name first.");
 
   const video = document.getElementById("video");
   const snap = document.createElement("canvas");
@@ -187,7 +248,7 @@ async function registerFace() {
     name,
     role,
     descriptor: Array.from(lastDetection.descriptor),
-    photo
+    photo,
   };
 
   await window.dbAPI.addUser(user);
@@ -195,12 +256,12 @@ async function registerFace() {
   loadUsers();
 }
 
-/* ===== Load users ===== */
+/* ===== Load Users ===== */
 async function loadUsers() {
   const users = await window.dbAPI.getAllUsers();
   const list = document.getElementById("userList");
   list.innerHTML = "";
-  users.forEach(u => {
+  users.forEach((u) => {
     const li = document.createElement("li");
     li.innerHTML = `
       <span>${u.name} (${u.role})</span>
@@ -214,7 +275,12 @@ async function loadUsers() {
 async function startRecognition() {
   const users = await window.dbAPI.getAllUsers();
   if (!users.length) return;
-  const labeled = users.map(u => new faceapi.LabeledFaceDescriptors(u.name, [new Float32Array(u.descriptor)]));
+  const labeled = users.map(
+    (u) =>
+      new faceapi.LabeledFaceDescriptors(u.name, [
+        new Float32Array(u.descriptor),
+      ])
+  );
   const matcher = new faceapi.FaceMatcher(labeled, 0.6);
 
   const video = document.getElementById("video");
@@ -222,10 +288,14 @@ async function startRecognition() {
   const ctx = canvas.getContext("2d");
 
   recognitionInterval = setInterval(async () => {
-    if (currentMode !== "recognition" || !modelsLoaded || video.readyState < 2) return;
+    if (currentMode !== "recognition" || !modelsLoaded || video.readyState < 2)
+      return;
 
     const detection = await faceapi
-      .detectSingleFace(video, new faceapi.TinyFaceDetectorOptions({ inputSize: 416, scoreThreshold: 0.5 }))
+      .detectSingleFace(
+        video,
+        new faceapi.TinyFaceDetectorOptions({ inputSize: 416, scoreThreshold: 0.5 })
+      )
       .withFaceLandmarks()
       .withFaceDescriptor();
 
@@ -244,3 +314,11 @@ async function startRecognition() {
     }
   }, 600);
 }
+
+/* ===== Cleanup ===== */
+window.addEventListener("beforeunload", () => {
+  try {
+    if (currentStream) currentStream.getTracks().forEach((t) => t.stop());
+  } catch (e) {}
+  clearDetectionLoops();
+});
