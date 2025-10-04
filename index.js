@@ -11,6 +11,21 @@ let lastDrawTime = 0;
 let videoDevices = [];
 
 /* =====================================================
+   UTILITY — CLEAR ACTIVE INTERVALS
+===================================================== */
+function clearIntervals() {
+  if (typeof adminDetectInterval !== "undefined" && adminDetectInterval) {
+    clearInterval(adminDetectInterval);
+    adminDetectInterval = null;
+  }
+  if (typeof recognitionInterval !== "undefined" && recognitionInterval) {
+    clearInterval(recognitionInterval);
+    recognitionInterval = null;
+  }
+}
+
+
+/* =====================================================
    STATUS HANDLER
 ===================================================== */
 function setStatus(msg) {
