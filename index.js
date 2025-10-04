@@ -66,7 +66,7 @@ function switchMode(mode) {
             <option>Guardian</option><option>Other</option>
           </select>
         </div>
-        <p style="font-size: 0.85em; color: #777;">📷 Show your face or a photo in front of the camera.</p>
+        <p style="font-size: 0.85em; color: #777;">📷 Show your face or a photo clearly in front of the camera.</p>
         <h4>Registered Users</h4><ul id="userList"></ul>
       </div>
       <div class="actions">
@@ -86,7 +86,7 @@ function switchMode(mode) {
   }
 }
 
-/* ===== Adaptive Threshold Detection for Registration ===== */
+/* ===== Adaptive Threshold + Larger Box Detection ===== */
 async function startLiveDetection() {
   const video = document.getElementById("video");
   const canvas = document.getElementById("overlay");
@@ -100,26 +100,40 @@ async function startLiveDetection() {
     }
     if (!modelsLoaded || video.readyState !== 4) return;
 
-    // Dynamically adjust threshold based on face size
+    // Adaptive detection parameters
     let threshold = 0.4;
+    let inputSize = 416; // bigger model for clearer boundaries
+
     if (lastDetection) {
       const boxWidthRatio = lastDetection.detection.box.width / video.videoWidth;
-      if (boxWidthRatio < 0.2) threshold = 0.3; // small/far face
-      else if (boxWidthRatio > 0.5) threshold = 0.5; // close/large face
+      if (boxWidthRatio < 0.2) {
+        threshold = 0.3;
+        inputSize = 512; // small/far face → higher resolution
+      } else if (boxWidthRatio > 0.5) {
+        threshold = 0.5;
+        inputSize = 320; // close face → smaller model, faster
+      }
     }
 
     const detection = await faceapi
-      .detectSingleFace(video, new faceapi.TinyFaceDetectorOptions({ inputSize: 320, scoreThreshold: threshold }))
+      .detectSingleFace(video, new faceapi.TinyFaceDetectorOptions({ inputSize, scoreThreshold: threshold }))
       .withFaceLandmarks()
       .withFaceDescriptor();
 
     ctx.clearRect(0, 0, canvas.width, canvas.height);
 
     if (detection) {
-      const { x, y, width, height } = detection.detection.box;
+      // Expand bounding box by 20%
+      const box = detection.detection.box;
+      const expandFactor = 0.2;
+      const newX = Math.max(0, box.x - box.width * expandFactor / 2);
+      const newY = Math.max(0, box.y - box.height * expandFactor / 2);
+      const newW = Math.min(canvas.width - newX, box.width * (1 + expandFactor));
+      const newH = Math.min(canvas.height - newY, box.height * (1 + expandFactor));
+
       ctx.strokeStyle = "yellow";
       ctx.lineWidth = 3;
-      ctx.strokeRect(x, y, width, height);
+      ctx.strokeRect(newX, newY, newW, newH);
 
       lastDetection = detection;
 
@@ -157,7 +171,6 @@ async function registerFace() {
 
   await window.dbAPI.addUser(user);
   alert(`✅ Registered ${name}`);
-
   document.getElementById("username").value = "";
   loadUsers();
 }
@@ -214,7 +227,7 @@ async function startRecognition() {
     if (!modelsLoaded || video.readyState !== 4) return;
 
     const detection = await faceapi
-      .detectSingleFace(video, new faceapi.TinyFaceDetectorOptions({ inputSize: 320, scoreThreshold: 0.5 }))
+      .detectSingleFace(video, new faceapi.TinyFaceDetectorOptions({ inputSize: 416, scoreThreshold: 0.5 }))
       .withFaceLandmarks()
       .withFaceDescriptor();
 
