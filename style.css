@@ -11,16 +11,13 @@ body {
   overflow: hidden;
 }
 
-/* ===== App Layout ===== */
+/* ===== Layout ===== */
 .app-container {
   display: flex;
   flex-direction: row;
   width: 100vw;
   height: 100vh;
-  transition: all 0.3s ease;
 }
-
-/* ===== Camera Section ===== */
 .camera-area {
   position: relative;
   flex: 1 1 70%;
@@ -28,7 +25,6 @@ body {
   display: flex;
   align-items: center;
   justify-content: center;
-  overflow: hidden;
 }
 video,
 canvas {
@@ -36,8 +32,6 @@ canvas {
   width: 100%;
   height: 100%;
   object-fit: cover;
-  top: 0;
-  left: 0;
 }
 .video-status {
   position: absolute;
@@ -50,17 +44,15 @@ canvas {
   font-size: 0.9rem;
 }
 
-/* ===== Control Panel ===== */
+/* ===== Side Panel ===== */
 .menu-panel {
   width: 350px;
-  max-width: 40%;
-  background: #ffffff;
+  background: #fff;
   box-shadow: -4px 0 12px rgba(0, 0, 0, 0.08);
   display: flex;
   flex-direction: column;
   padding: 16px;
   overflow-y: auto;
-  transition: all 0.3s ease;
 }
 .app-title {
   margin: 0 0 12px;
@@ -70,25 +62,18 @@ canvas {
   font-weight: 700;
 }
 
-/* ===== Camera Dropdown ===== */
+/* ===== Camera Controls ===== */
 .camera-controls {
   display: flex;
   align-items: center;
   gap: 8px;
   margin-bottom: 12px;
 }
-.camera-controls label {
-  font-size: 0.9rem;
-  color: #333;
-}
 .camera-controls select {
   flex: 1;
   padding: 6px 8px;
-  border: 1px solid #d0d7de;
   border-radius: 6px;
-  background: #fff;
-  font-size: 0.9rem;
-  outline: none;
+  border: 1px solid #ccc;
 }
 .camera-controls button {
   background: #2e7d32;
@@ -98,20 +83,16 @@ canvas {
   padding: 7px 10px;
   cursor: pointer;
   font-weight: 600;
-  transition: background 0.2s;
-}
-.camera-controls button:hover {
-  background: #1b5e20;
 }
 
-/* ===== Buttons ===== */
+/* ===== Menu Buttons ===== */
 .menu-buttons {
   display: flex;
+  flex-direction: column;
   gap: 8px;
   margin-bottom: 12px;
 }
 .menu-buttons button {
-  flex: 1;
   background: #1976d2;
   color: white;
   border: none;
@@ -119,7 +100,6 @@ canvas {
   padding: 10px;
   font-weight: 600;
   cursor: pointer;
-  transition: background 0.25s;
 }
 .menu-buttons button:hover {
   background: #0d47a1;
@@ -132,10 +112,9 @@ canvas {
   padding: 8px;
   margin-bottom: 12px;
   font-size: 0.9rem;
-  line-height: 1.4;
 }
 
-/* ===== Mode Section ===== */
+/* ===== Mode Content ===== */
 .mode-content {
   flex: 1;
   font-size: 0.9rem;
@@ -148,64 +127,46 @@ canvas {
   font-weight: 600;
   margin-bottom: 4px;
 }
-input[type="text"],
+input,
 select {
   width: 100%;
   padding: 8px;
   border-radius: 6px;
-  border: 1px solid #d0d7de;
-  font-size: 0.95rem;
+  border: 1px solid #ccc;
 }
 
-/* ===== Register Button ===== */
-#registerBtn {
+/* ===== Buttons ===== */
+button.primary {
   width: 100%;
   padding: 10px;
-  border: none;
-  border-radius: 6px;
   background: #43a047;
   color: white;
+  border: none;
+  border-radius: 6px;
   font-weight: 700;
   cursor: pointer;
 }
-#registerBtn:disabled {
+button.primary:disabled {
   background: #cfd8dc;
   cursor: not-allowed;
 }
 
-/* ===== Registered List ===== */
-#userList {
+/* ===== Lists ===== */
+#userList,
+#childList,
+#linkList {
   list-style: none;
   margin: 0;
   padding: 0;
 }
-#userList li {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
+.list-item {
   background: #fafafa;
   border-radius: 6px;
   padding: 6px 8px;
   margin-bottom: 6px;
-}
-#userList button {
-  background: #e53935;
-  color: white;
-  border: none;
-  border-radius: 6px;
-  padding: 4px 8px;
-  cursor: pointer;
-}
-#userList button:hover {
-  background: #b71c1c;
-}
-
-/* ===== Added for Update + Count ===== */
-.count-text {
-  margin-bottom: 10px;
-  font-size: 0.95rem;
-  color: #333;
-  font-weight: 600;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
 }
 .action-buttons {
   display: flex;
@@ -217,10 +178,13 @@ select {
   border: none;
   border-radius: 6px;
   padding: 4px 8px;
-  cursor: pointer;
 }
-.edit-btn:hover {
-  background: #ff6f00;
+.danger {
+  background: #e53935;
+  color: white;
+  border: none;
+  border-radius: 6px;
+  padding: 4px 8px;
 }
 
 /* ===== Responsive ===== */
@@ -231,21 +195,10 @@ select {
   .camera-area {
     width: 100%;
     height: 60vh;
-    flex: 0 0 auto;
   }
   .menu-panel {
     width: 100%;
     height: 40vh;
     box-shadow: 0 -4px 10px rgba(0, 0, 0, 0.08);
-  }
-  .camera-controls {
-    flex-direction: column;
-    align-items: stretch;
-  }
-  .menu-buttons {
-    flex-direction: column;
-  }
-  .app-title {
-    font-size: 1.2rem;
   }
 }

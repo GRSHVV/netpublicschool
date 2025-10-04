@@ -11,7 +11,6 @@
 </head>
 <body>
   <div class="app-container">
-    
     <!-- Camera Section -->
     <section class="camera-area">
       <video id="video" autoplay muted playsinline></video>
@@ -19,9 +18,9 @@
       <div id="video-status" class="video-status">Initializing camera...</div>
     </section>
 
-    <!-- Right / Bottom Panel -->
+    <!-- Menu Panel -->
     <aside class="menu-panel">
-      <h2 class="app-title">Face System</h2>
+      <h2 class="app-title">Smart Pickup System</h2>
 
       <div class="camera-controls">
         <label for="cameraSelect">Camera:</label>
@@ -30,13 +29,14 @@
       </div>
 
       <div class="menu-buttons">
-        <button id="btnRegisterMode" onclick="switchMode('admin')">Register</button>
-        <button id="btnRecognitionMode" onclick="switchMode('recognition')">Recognize</button>
+        <button onclick="switchMode('admin')">Register Parent</button>
+        <button onclick="switchMode('child')">Register Child</button>
+        <button onclick="switchMode('link')">Link Parent-Child</button>
+        <button onclick="switchMode('recognition')">Recognize</button>
       </div>
 
       <div class="status-box">
-        <strong>Status:</strong>
-        <span id="statusMsg">Initializing...</span>
+        <strong>Status:</strong> <span id="statusMsg">Initializing...</span>
       </div>
 
       <div id="modeContent" class="mode-content">
