@@ -107,18 +107,28 @@ async function startCamera() {
   await switchCamera(currentDeviceId);
 }
 
-async function switchCamera(deviceId) {
+async function switchCamera(deviceId, useBackCamera = false) {
   try {
-    // Stop existing stream if any
+    // Stop existing stream if active
     if (currentStream) {
-      currentStream.getTracks().forEach((t) => t.stop());
-      currentStream = null;
+      currentStream.getTracks().forEach((track) => track.stop());
     }
 
-    const constraints = {
-      video: deviceId ? { deviceId: { exact: deviceId } } : { facingMode: "environment" },
-      audio: false,
-    };
+    let constraints;
+    if (useBackCamera) {
+      // ✅ Prefer environment camera for mobile
+      constraints = {
+        video: { facingMode: { ideal: "environment" } },
+        audio: false,
+      };
+    } else if (deviceId) {
+      constraints = {
+        video: { deviceId: { exact: deviceId } },
+        audio: false,
+      };
+    } else {
+      constraints = { video: true, audio: false };
+    }
 
     const stream = await navigator.mediaDevices.getUserMedia(constraints);
     const v = document.getElementById("video");
@@ -129,13 +139,25 @@ async function switchCamera(deviceId) {
     v.onloadedmetadata = () => {
       v.play();
       resizeOverlay();
-      setStatus(`🎥 Active: ${getCameraLabel(deviceId)}`);
+      setStatus(`🎥 Camera Active: ${getCameraLabel(deviceId) || (useBackCamera ? "Back" : "Front")}`);
     };
   } catch (err) {
-    console.error("Camera switch failed:", err);
-    alert("Unable to activate selected camera. Please check permissions or try another device.");
+    console.error("Camera switch failed:", err.name, err.message);
+
+    if (err.name === "NotAllowedError" || err.name === "SecurityError") {
+      alert(
+        "Permission denied for this camera. Please allow access or check site settings."
+      );
+    } else if (err.name === "OverconstrainedError") {
+      // Fallback if exact deviceId not available
+      console.warn("Back camera unavailable, retrying with default...");
+      await switchCamera(null, true);
+    } else {
+      alert("Unable to access the selected camera. Please retry.");
+    }
   }
 }
+
 
 function getCameraLabel(deviceId) {
   const d = videoDevices.find((x) => x.deviceId === deviceId);
