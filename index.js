@@ -416,8 +416,13 @@ async function startRecognition() {
   const users = await window.dbAPI.getAllUsers();
   const links = await window.dbAPI.getAllLinks();
   const children = await window.dbAPI.getAllChildren();
-  if (!users.length) return setStatus("⚠️ No parents registered.");
 
+  if (!users.length) {
+    setStatus("⚠️ No registered parents found.");
+    return;
+  }
+
+  // Create labeled face descriptors
   const labeled = users.map(
     (u) => new faceapi.LabeledFaceDescriptors(u.name, [new Float32Array(u.descriptor)])
   );
@@ -435,7 +440,12 @@ async function startRecognition() {
     if (!modelsLoaded || !v.videoWidth) return;
     const now = Date.now();
 
-    if (lastResult && now - lastResultTime < 3000) return;
+    // Dynamically sync overlay canvas size to video
+    const videoRect = v.getBoundingClientRect();
+    o.width = videoRect.width;
+    o.height = videoRect.height;
+
+    if (lastResult && now - lastResultTime < 3000) return; // 3s persistence
 
     const det = await faceapi
       .detectSingleFace(v, new faceapi.TinyFaceDetectorOptions({ scoreThreshold: 0.4 }))
@@ -452,6 +462,7 @@ async function startRecognition() {
       const best = matcher.findBestMatch(det.descriptor);
       const box = resized.detection.box;
 
+      // Draw bounding box
       if (best.label === "unknown") {
         ctx.strokeStyle = "red";
         ctx.lineWidth = 3;
@@ -459,6 +470,7 @@ async function startRecognition() {
         ctx.fillStyle = "red";
         ctx.font = "16px Arial";
         ctx.fillText("Unrecognized", box.x, box.y - 10);
+
         resultBox.innerHTML =
           "<p style='color:red; font-weight:600;'>❌ Unrecognized face</p>";
         lastResult = "unknown";
@@ -470,18 +482,23 @@ async function startRecognition() {
         ctx.font = "16px Arial";
         ctx.fillText(best.label, box.x, box.y - 10);
 
+        // Retrieve linked children
         const parent = users.find((u) => u.name === best.label);
         const link = links.find((l) => l.parentId === parent?.id);
+
         if (link && link.childrenIds.length > 0) {
+          // ✅ Show all linked children correctly
           const kids = link.childrenIds
             .map((cid) => {
               const c = children.find((ch) => ch.id === cid);
-              return c ? `${c.name} (${c.class}-${c.section})` : "";
+              return c ? `<li>${c.name} (${c.class}-${c.section})</li>` : "";
             })
-            .join("<br>");
+            .join("");
+
           resultBox.innerHTML = `
             <p style='color:green; font-weight:600;'>✅ Recognized: ${best.label}</p>
-            <p><strong>Linked Children:</strong><br>${kids}</p>
+            <p><strong>Linked Children:</strong></p>
+            <ul style="margin-left:10px; list-style-type:circle;">${kids}</ul>
           `;
         } else {
           resultBox.innerHTML = `
@@ -491,9 +508,8 @@ async function startRecognition() {
         }
         lastResult = best.label;
       }
+
       lastResultTime = now;
-    } else {
-      setStatus("No face detected...");
     }
   }, 500);
 }
