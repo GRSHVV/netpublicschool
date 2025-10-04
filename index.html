@@ -1,33 +1,41 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8" />
-  <title>AI Face Registration & Recognition</title>
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <link rel="manifest" href="manifest.json" />
+  <meta charset="utf-8" />
+  <title>Face Registration & Recognition</title>
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
   <link rel="stylesheet" href="style.css" />
+  <!-- face-api must be present in your project root or served -->
   <script defer src="face-api.min.js"></script>
   <script defer src="db.js"></script>
   <script defer src="index.js"></script>
 </head>
 <body>
   <div class="app-container">
-    <!-- Camera Feed -->
+    <!-- Camera area (large) -->
     <section class="camera-area">
       <video id="video" autoplay muted playsinline></video>
       <canvas id="overlay"></canvas>
+      <div id="video-status" class="video-status">Loading camera...</div>
     </section>
 
-    <!-- Control Panel (Right Side) -->
-    <section class="menu-panel" id="modeContent">
+    <!-- Right menu / controls -->
+    <aside class="menu-panel">
       <div class="menu-buttons">
-        <button onclick="switchMode('admin')">Register User</button>
-        <button onclick="switchMode('recognition')">Recognition</button>
+        <button id="btnRegisterMode" onclick="switchMode('admin')">Register User</button>
+        <button id="btnRecognitionMode" onclick="switchMode('recognition')">Recognition</button>
+        <button id="btnStartCamera" onclick="startCamera()" title="Use this if camera didn't start">Start Camera</button>
       </div>
-      <div class="menu-content">
-        <p>Select a mode to begin.</p>
+
+      <div id="statusBox" class="status-box">
+        <div><strong>Status</strong></div>
+        <div id="statusMsg">Initializing...</div>
       </div>
-    </section>
+
+      <div class="menu-content" id="modeContent">
+        <p>Select a mode to begin (Register or Recognition).</p>
+      </div>
+    </aside>
   </div>
 </body>
 </html>

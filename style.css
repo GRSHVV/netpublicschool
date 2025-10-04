@@ -1,217 +1,95 @@
-* {
-  box-sizing: border-box;
-}
+* { box-sizing: border-box; }
+body { margin: 0; font-family: Inter, "Segoe UI", Arial; background: #f5f7fa; color: #222; height: 100vh; overflow: hidden; }
 
-body {
-  margin: 0;
-  font-family: "Inter", "Segoe UI", Arial, sans-serif;
-  background: #f5f6fa;
-  color: #333;
-  overflow: hidden;
-}
+.app-container { display: flex; width: 100vw; height: 100vh; }
 
-/* ----------- MAIN LAYOUT ----------- */
-.app-container {
-  display: flex;
-  flex-direction: row;
-  width: 100vw;
-  height: 100vh;
-  background: #000;
-}
-
-/* CAMERA SECTION */
+/* Large camera on left */
 .camera-area {
   position: relative;
-  flex: 70%;
+  flex: 1 1 70%;
+  background: #000;
   display: flex;
   align-items: center;
   justify-content: center;
-  background: #000;
   overflow: hidden;
 }
 
-video,
-canvas {
+/* video + overlay always cover the camera-area */
+video, canvas { position: absolute; width: 100%; height: 100%; top: 0; left: 0; object-fit: cover; }
+
+/* small status text over video */
+.video-status {
   position: absolute;
-  top: 0;
-  left: 0;
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
+  left: 12px;
+  bottom: 12px;
+  padding: 6px 8px;
+  background: rgba(0,0,0,0.5);
+  color: #fff;
+  border-radius: 6px;
+  font-size: 0.9rem;
+  z-index: 20;
 }
 
-/* MENU PANEL (RIGHT SIDE) */
+/* Menu panel on right */
 .menu-panel {
-  flex: 30%;
-  display: flex;
-  flex-direction: column;
-  background: #ffffff;
-  padding: 1.2rem;
-  box-shadow: -2px 0 10px rgba(0, 0, 0, 0.2);
-  overflow-y: auto;
-}
-
-.menu-buttons {
+  width: 360px;
+  max-width: 40%;
+  min-width: 280px;
+  background: #fff;
+  box-shadow: -4px 0 16px rgba(0,0,0,0.08);
+  padding: 16px;
   display: flex;
   flex-direction: column;
   gap: 12px;
-  margin-bottom: 1rem;
+  overflow-y: auto;
 }
 
+/* buttons */
+.menu-buttons { display: flex; gap: 8px; margin-bottom: 8px; }
 .menu-buttons button {
-  background: #0078d7;
-  color: white;
-  font-size: 1rem;
-  border: none;
+  flex: 1;
   padding: 10px;
+  border: none;
   border-radius: 8px;
   cursor: pointer;
-  transition: all 0.25s ease;
-}
-
-.menu-buttons button:hover {
-  background: #005fa3;
-}
-
-.menu-content {
-  flex-grow: 1;
-}
-
-h3 {
-  margin-bottom: 10px;
-}
-
-.form-group {
-  margin-bottom: 10px;
-}
-
-label {
-  display: block;
+  background: #1976d2;
+  color: #fff;
   font-weight: 600;
-  margin-bottom: 5px;
 }
+.menu-buttons button#btnStartCamera { background: #555; }
 
-input,
-select {
-  width: 100%;
-  padding: 8px;
-  border: 1px solid #ccc;
-  border-radius: 6px;
-  font-size: 1rem;
-}
+.status-box { background: #f1f5f9; padding: 8px; border-radius: 6px; font-size: 0.9rem; color:#333; }
 
-button#registerBtn {
+/* content area where forms appear */
+.menu-content { padding-top: 6px; }
+
+/* forms */
+.form-group { margin-bottom: 10px; }
+.form-group label { display:block; margin-bottom:6px; font-weight:600; color:#333; font-size:0.95rem; }
+input[type="text"], select { width:100%; padding:8px; border-radius:6px; border:1px solid #d0d7de; font-size:0.95rem; }
+
+/* register button */
+#registerBtn {
   width: 100%;
-  background: #4caf50;
-  color: #fff;
-  font-size: 1rem;
   padding: 10px;
+  border-radius: 8px;
   border: none;
-  border-radius: 6px;
-  margin-top: 10px;
+  font-weight: 700;
+  font-size: 1rem;
+  color: white;
+  background: #2e7d32;
   cursor: pointer;
-  transition: background 0.25s;
 }
+#registerBtn:disabled { background:#bdbdbd; cursor:not-allowed; }
 
-button#registerBtn:hover:not(:disabled) {
-  background: #3e8e41;
-}
+/* user list */
+#userList { margin-top: 10px; list-style: none; padding: 0; }
+#userList li { display:flex; align-items:center; justify-content:space-between; padding:8px 6px; background:#fafafa; border-radius:6px; margin-bottom:8px; }
+#userList img { width:36px; height:36px; border-radius:50%; margin-right:8px; object-fit:cover; }
 
-button#registerBtn:disabled {
-  background: #ccc;
-  cursor: not-allowed;
-}
-
-ul {
-  list-style: none;
-  padding: 0;
-  margin: 0;
-}
-
-li {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  margin-bottom: 6px;
-}
-
-li img {
-  border-radius: 50%;
-  margin-right: 8px;
-}
-
-button.danger {
-  background: #e53935;
-  color: #fff;
-  border: none;
-  border-radius: 4px;
-  cursor: pointer;
-  padding: 4px 8px;
-  font-size: 0.8rem;
-}
-
-button.danger:hover {
-  background: #c62828;
-}
-
-/* ----------- RESPONSIVE DESIGN ----------- */
-
-/* Tablets in portrait */
-@media (max-width: 1024px) and (orientation: portrait) {
-  .app-container {
-    flex-direction: column;
-  }
-
-  .camera-area {
-    flex: 0 0 65%;
-    height: 65vh;
-  }
-
-  .menu-panel {
-    flex: 0 0 35%;
-    height: 35vh;
-    box-shadow: 0 -2px 10px rgba(0, 0, 0, 0.2);
-  }
-
-  .menu-buttons {
-    flex-direction: row;
-    justify-content: space-around;
-  }
-
-  .menu-buttons button {
-    flex: 1;
-    font-size: 0.95rem;
-  }
-}
-
-/* Phones */
-@media (max-width: 768px) {
-  body {
-    overflow: auto;
-  }
-
-  .app-container {
-    flex-direction: column;
-  }
-
-  .camera-area {
-    flex: 0 0 60%;
-    height: 60vh;
-  }
-
-  .menu-panel {
-    flex: 0 0 40%;
-    height: 40vh;
-    padding: 0.8rem;
-  }
-
-  .menu-buttons {
-    flex-direction: row;
-    gap: 6px;
-  }
-
-  .menu-buttons button {
-    font-size: 0.9rem;
-    padding: 8px;
-  }
+/* responsive: on small widths stack menu below camera but keep menu icon on top */
+@media (max-width: 980px) {
+  .app-container { flex-direction: column; }
+  .camera-area { height: 56vh; flex: 0 0 auto; }
+  .menu-panel { width: 100%; min-width: 100%; max-width: 100%; height: 44vh; box-shadow: 0 -4px 20px rgba(0,0,0,0.06); }
 }
