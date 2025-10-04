@@ -1,4 +1,4 @@
-// index.js — with Registered Count + Edit/Update
+// index.js — Complete version with Registered Count + Edit/Update
 
 let currentMode = null;
 let modelsLoaded = false;
@@ -86,6 +86,7 @@ async function startCameraById(deviceId) {
   };
 }
 
+/* ===== Default camera start ===== */
 async function startCamera() {
   await getVideoDevices();
   if (videoDevices.length === 0) return;
@@ -252,13 +253,14 @@ async function editUser(id) {
   document.getElementById("registerBtn").textContent = "Update";
   alert(`Edit mode: ${u.name}`);
 }
+
 async function deleteUser(id) {
   if (!confirm("Delete this user?")) return;
   await window.dbAPI.deleteUser(id);
   loadUsers();
 }
 
-/* ===== Recognition ===== */
+/* ===== Recognition Mode ===== */
 async function startRecognition() {
   const users = await window.dbAPI.getAllUsers();
   if (!users.length) return;
@@ -278,4 +280,31 @@ async function startRecognition() {
     const detection = await faceapi
       .detectSingleFace(
         video,
-        new faceapi.Tiny
+        new faceapi.TinyFaceDetectorOptions({ inputSize: 416, scoreThreshold: 0.5 })
+      )
+      .withFaceLandmarks()
+      .withFaceDescriptor();
+
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+    if (detection) {
+      const box = detection.detection.box;
+      ctx.strokeStyle = "green";
+      ctx.lineWidth = 3;
+      ctx.strokeRect(box.x, box.y, box.width, box.height);
+      const match = matcher.findBestMatch(detection.descriptor);
+      document.getElementById("childSelection").innerHTML =
+        match.label === "unknown"
+          ? "<p style='color:red'>❌ Unknown Face</p>"
+          : `<p>✅ Recognized: <strong>${match.label}</strong></p>`;
+    }
+  }, 600);
+}
+
+/* ===== Cleanup ===== */
+window.addEventListener("beforeunload", () => {
+  try {
+    if (currentStream) currentStream.getTracks().forEach((t) => t.stop());
+  } catch (e) {}
+  clearDetectionLoops();
+});
