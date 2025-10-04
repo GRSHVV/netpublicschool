@@ -1,4 +1,4 @@
-// index.js — Fixed bounding box alignment in Register and Recognition modes
+// index.js — Final version with linked children display on recognition
 
 let currentMode = null;
 let modelsLoaded = false;
@@ -60,7 +60,7 @@ async function startCamera() {
   if (id) await startCameraById(id);
 }
 
-/* ===== Resize Canvas to Match Video ===== */
+/* ===== Resize Canvas ===== */
 function resizeOverlay() {
   const v = document.getElementById("video");
   const c = document.getElementById("overlay");
@@ -68,7 +68,7 @@ function resizeOverlay() {
   c.height = v.offsetHeight;
 }
 
-/* ===== Initialize ===== */
+/* ===== Init ===== */
 document.addEventListener("DOMContentLoaded", async () => {
   await window.dbAPI.openDB();
   await loadModels();
@@ -84,7 +84,6 @@ function switchMode(mode) {
   const camera = document.getElementById("cameraArea");
   const c = document.getElementById("modeContent");
 
-  // hide camera in child registration
   if (mode === "child") camera.classList.add("camera-hidden");
   else camera.classList.remove("camera-hidden");
 
@@ -129,18 +128,21 @@ function switchMode(mode) {
   }
 
   if (mode === "recognition") {
-    c.innerHTML = `<h3>Recognition</h3><div id="childSelection"></div>`;
+    c.innerHTML = `
+      <h3>Recognition</h3>
+      <div id="recognitionResult" class="result-box"></div>
+    `;
     startRecognition();
   }
 }
 
-/* ===== Clear Intervals ===== */
+/* ===== Clear Loops ===== */
 function clearIntervals() {
   if (adminDetectInterval) clearInterval(adminDetectInterval);
   if (recognitionInterval) clearInterval(recognitionInterval);
 }
 
-/* ===== Face Detection with Proper Alignment ===== */
+/* ===== Parent Detection ===== */
 function detectParentFace() {
   const v = document.getElementById("video");
   const o = document.getElementById("overlay");
@@ -159,8 +161,8 @@ function detectParentFace() {
     ctx.clearRect(0, 0, o.width, o.height);
 
     if (detection) {
-      const resizedDet = faceapi.resizeResults(detection, displaySize);
-      faceapi.draw.drawDetections(o, resizedDet);
+      const resized = faceapi.resizeResults(detection, displaySize);
+      faceapi.draw.drawDetections(o, resized);
       lastDetection = detection;
       const name = document.getElementById("username").value.trim();
       btn.disabled = !name;
@@ -171,7 +173,7 @@ function detectParentFace() {
   }, 400);
 }
 
-/* ===== Parent Register ===== */
+/* ===== Register Parent ===== */
 async function registerUser() {
   const name = document.getElementById("username").value.trim();
   const role = document.getElementById("role").value;
@@ -251,17 +253,22 @@ async function loadLinks() {
   });
 }
 
-/* ===== Recognition with Proper Alignment ===== */
+/* ===== Recognition Mode with Linked Children Display ===== */
 async function startRecognition() {
   const users = await window.dbAPI.getAllUsers();
+  const links = await window.dbAPI.getAllLinks();
+  const children = await window.dbAPI.getAllChildren();
   if (!users.length) return;
+
   const labeled = users.map(
     (u) => new faceapi.LabeledFaceDescriptors(u.name, [new Float32Array(u.descriptor)])
   );
   const matcher = new faceapi.FaceMatcher(labeled, 0.6);
+
   const v = document.getElementById("video");
   const o = document.getElementById("overlay");
   const ctx = o.getContext("2d");
+  const resultBox = document.getElementById("recognitionResult");
 
   recognitionInterval = setInterval(async () => {
     if (!modelsLoaded || !v.videoWidth) return;
@@ -273,21 +280,53 @@ async function startRecognition() {
     const displaySize = { width: o.width, height: o.height };
     faceapi.matchDimensions(o, displaySize);
     ctx.clearRect(0, 0, o.width, o.height);
+    resultBox.innerHTML = "";
 
     if (det) {
       const resized = faceapi.resizeResults(det, displaySize);
       const best = matcher.findBestMatch(det.descriptor);
-      faceapi.draw.drawDetections(o, resized);
-      const color = best.label === "unknown" ? "red" : "green";
       const box = resized.detection.box;
-      ctx.strokeStyle = color;
-      ctx.lineWidth = 3;
-      ctx.strokeRect(box.x, box.y, box.width, box.height);
-      ctx.fillStyle = color;
-      ctx.font = "16px Arial";
-      ctx.fillText(best.label, box.x, box.y - 10);
+
+      if (best.label === "unknown") {
+        ctx.strokeStyle = "red";
+        ctx.lineWidth = 3;
+        ctx.strokeRect(box.x, box.y, box.width, box.height);
+        ctx.fillStyle = "red";
+        ctx.font = "16px Arial";
+        ctx.fillText("Unrecognized", box.x, box.y - 10);
+        resultBox.innerHTML =
+          "<p style='color:red; font-weight:600;'>❌ Unrecognized face</p>";
+      } else {
+        ctx.strokeStyle = "green";
+        ctx.lineWidth = 3;
+        ctx.strokeRect(box.x, box.y, box.width, box.height);
+        ctx.fillStyle = "green";
+        ctx.font = "16px Arial";
+        ctx.fillText(best.label, box.x, box.y - 10);
+
+        // Find linked children
+        const parent = users.find((u) => u.name === best.label);
+        const link = links.find((l) => l.parentId === parent?.id);
+        if (link && link.childrenIds.length > 0) {
+          const kids = link.childrenIds
+            .map((cid) => {
+              const c = children.find((ch) => ch.id === cid);
+              return c ? `${c.name} (${c.class}-${c.section})` : "";
+            })
+            .join("<br>");
+          resultBox.innerHTML = `
+            <p style='color:green; font-weight:600;'>✅ Recognized: ${best.label}</p>
+            <p><strong>Linked Children:</strong><br>${kids}</p>
+          `;
+        } else {
+          resultBox.innerHTML = `
+            <p style='color:orange; font-weight:600;'>✅ Recognized: ${best.label}</p>
+            <p>No linked children found</p>
+          `;
+        }
+      }
     }
-  }, 500);
+  }, 600);
 }
 
 /* ===== Cleanup ===== */
