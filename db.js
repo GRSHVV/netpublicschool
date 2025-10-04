@@ -7,7 +7,7 @@ window.dbAPI = {
   async openDB() {
     if (this.db) return this.db;
     return new Promise((resolve, reject) => {
-      const request = indexedDB.open("FacePickupDB", 1);
+      const request = indexedDB.open("FacePickupDB", 5);
 
       request.onupgradeneeded = (event) => {
         const db = event.target.result;
@@ -139,3 +139,4 @@ window.dbAPI = {
     return await store.getAll();
   },
 };
+
