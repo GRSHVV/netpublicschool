@@ -11,18 +11,20 @@
   <script defer src="index.js"></script>
 </head>
 <body>
-  <div class="layout">
+  <div class="app-container">
+    <!-- Camera Feed -->
     <section class="camera-area">
       <video id="video" autoplay muted playsinline></video>
       <canvas id="overlay"></canvas>
     </section>
 
-    <section class="control-area" id="modeContent">
-      <div class="top-controls">
+    <!-- Control Panel (Right Side) -->
+    <section class="menu-panel" id="modeContent">
+      <div class="menu-buttons">
         <button onclick="switchMode('admin')">Register User</button>
         <button onclick="switchMode('recognition')">Recognition</button>
       </div>
-      <div class="content-area">
+      <div class="menu-content">
         <p>Select a mode to begin.</p>
       </div>
     </section>
