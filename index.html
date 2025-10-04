@@ -1,55 +1,36 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
-  <meta charset="utf-8" />
-  <title>Face Recognition Dashboard</title>
-  <link rel="manifest" href="manifest.json">
-  <link rel="stylesheet" href="style.css">
+  <meta charset="UTF-8" />
+  <title>AI Face Registration & Recognition</title>
+  <link rel="manifest" href="manifest.json" />
+  <link rel="stylesheet" href="style.css" />
   <script defer src="face-api.min.js"></script>
   <script defer src="db.js"></script>
-  <script defer src="sound.js"></script>
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
   <script defer src="index.js"></script>
 </head>
 <body>
   <div class="dashboard">
-    <!-- Main (left side) -->
+    <!-- Left Sidebar -->
+    <nav class="sidebar">
+      <h2>Menu</h2>
+      <ul>
+        <li><button onclick="switchMode('admin')">Register User</button></li>
+        <li><button onclick="switchMode('recognition')">Recognition Mode</button></li>
+      </ul>
+    </nav>
+
+    <!-- Right Panel -->
     <div class="main">
-      <!-- Top Panel (Camera) -->
       <div class="top-panel">
         <video id="video" autoplay muted playsinline></video>
         <canvas id="overlay"></canvas>
       </div>
 
-      <!-- Bottom Panel -->
-      <div class="bottom-panel">
-        <!-- Dynamic Content -->
-        <div id="modeContent">
-          <p>Select an option from the menu.</p>
-        </div>
-
-        <!-- Audit Log (Marquee) -->
-        <div class="audit-marquee">
-          <marquee id="auditTicker" behavior="scroll" direction="left" scrollamount="5">
-            No audit records yet.
-          </marquee>
-        </div>
+      <div class="bottom-panel" id="modeContent">
+        <p>Select a mode from the left menu.</p>
       </div>
     </div>
-
-    <!-- Sidebar (right side) -->
-    <nav class="sidebar">
-      <h2>Menu</h2>
-      <ul>
-        <li><button onclick="switchMode('admin')">Register User</button></li>
-        <li><button onclick="switchMode('children')">Manage Children</button></li>
-        <li><button onclick="switchMode('relations')">Manage Relations</button></li>
-        <li><button onclick="switchMode('recognition')">Recognition Mode</button></li>
-        <li><button onclick="exportAll()">Export All (ZIP)</button></li>
-        <input type="file" id="importAllFile" style="display:none" accept=".zip" onchange="importAll(event)">
-        <li><button onclick="document.getElementById('importAllFile').click()">Import All (ZIP)</button></li>
-      </ul>
-    </nav>
   </div>
 </body>
 </html>

@@ -46,7 +46,6 @@ document.addEventListener("DOMContentLoaded", async () => {
   await window.dbAPI.openDB();
   await loadModels();
   await startCamera();
-  loadAuditTicker();
 });
 
 /* ===== Mode Switch ===== */
@@ -66,7 +65,7 @@ function switchMode(mode) {
             <option>Guardian</option><option>Other</option>
           </select>
         </div>
-        <p style="font-size: 0.85em; color: #777;">📷 Show your face or a photo clearly in front of the camera.</p>
+        <p style="font-size: 0.85em; color: #777;">📷 Show your face or photo clearly to the camera.</p>
         <h4>Registered Users</h4><ul id="userList"></ul>
       </div>
       <div class="actions">
@@ -86,7 +85,7 @@ function switchMode(mode) {
   }
 }
 
-/* ===== Adaptive Threshold + Larger Box Detection ===== */
+/* ===== Adaptive Threshold + Expanded Box Detection ===== */
 async function startLiveDetection() {
   const video = document.getElementById("video");
   const canvas = document.getElementById("overlay");
@@ -100,18 +99,17 @@ async function startLiveDetection() {
     }
     if (!modelsLoaded || video.readyState !== 4) return;
 
-    // Adaptive detection parameters
     let threshold = 0.4;
-    let inputSize = 416; // bigger model for clearer boundaries
+    let inputSize = 416;
 
     if (lastDetection) {
       const boxWidthRatio = lastDetection.detection.box.width / video.videoWidth;
       if (boxWidthRatio < 0.2) {
         threshold = 0.3;
-        inputSize = 512; // small/far face → higher resolution
+        inputSize = 512;
       } else if (boxWidthRatio > 0.5) {
         threshold = 0.5;
-        inputSize = 320; // close face → smaller model, faster
+        inputSize = 320;
       }
     }
 
@@ -123,20 +121,18 @@ async function startLiveDetection() {
     ctx.clearRect(0, 0, canvas.width, canvas.height);
 
     if (detection) {
-      // Expand bounding box by 20%
       const box = detection.detection.box;
-      const expandFactor = 0.2;
-      const newX = Math.max(0, box.x - box.width * expandFactor / 2);
-      const newY = Math.max(0, box.y - box.height * expandFactor / 2);
-      const newW = Math.min(canvas.width - newX, box.width * (1 + expandFactor));
-      const newH = Math.min(canvas.height - newY, box.height * (1 + expandFactor));
+      const expand = 0.2;
+      const newX = Math.max(0, box.x - box.width * expand / 2);
+      const newY = Math.max(0, box.y - box.height * expand / 2);
+      const newW = Math.min(canvas.width - newX, box.width * (1 + expand));
+      const newH = Math.min(canvas.height - newY, box.height * (1 + expand));
 
       ctx.strokeStyle = "yellow";
       ctx.lineWidth = 3;
       ctx.strokeRect(newX, newY, newW, newH);
 
       lastDetection = detection;
-
       const name = document.getElementById("username").value.trim();
       btn.disabled = !name;
     } else {
