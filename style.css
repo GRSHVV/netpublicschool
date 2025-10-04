@@ -11,7 +11,7 @@ body {
   overflow: hidden;
 }
 
-/* ===== App Container ===== */
+/* ===== App Layout ===== */
 .app-container {
   display: flex;
   flex-direction: row;
@@ -20,7 +20,7 @@ body {
   transition: all 0.3s ease;
 }
 
-/* ===== Camera Area ===== */
+/* ===== Camera Section ===== */
 .camera-area {
   position: relative;
   flex: 1 1 70%;
@@ -30,7 +30,6 @@ body {
   justify-content: center;
   overflow: hidden;
 }
-
 video,
 canvas {
   position: absolute;
@@ -40,7 +39,6 @@ canvas {
   top: 0;
   left: 0;
 }
-
 .video-status {
   position: absolute;
   bottom: 10px;
@@ -64,7 +62,6 @@ canvas {
   overflow-y: auto;
   transition: all 0.3s ease;
 }
-
 .app-title {
   margin: 0 0 12px;
   text-align: center;
@@ -73,20 +70,17 @@ canvas {
   font-weight: 700;
 }
 
-/* ===== Camera Controls ===== */
+/* ===== Camera Dropdown ===== */
 .camera-controls {
   display: flex;
   align-items: center;
   gap: 8px;
   margin-bottom: 12px;
 }
-
 .camera-controls label {
-  white-space: nowrap;
   font-size: 0.9rem;
   color: #333;
 }
-
 .camera-controls select {
   flex: 1;
   padding: 6px 8px;
@@ -96,7 +90,6 @@ canvas {
   font-size: 0.9rem;
   outline: none;
 }
-
 .camera-controls button {
   background: #2e7d32;
   color: white;
@@ -111,7 +104,7 @@ canvas {
   background: #1b5e20;
 }
 
-/* ===== Mode Buttons ===== */
+/* ===== Buttons ===== */
 .menu-buttons {
   display: flex;
   gap: 8px;
@@ -142,12 +135,11 @@ canvas {
   line-height: 1.4;
 }
 
-/* ===== Mode Content ===== */
+/* ===== Mode Section ===== */
 .mode-content {
   flex: 1;
   font-size: 0.9rem;
 }
-
 .form-group {
   margin-bottom: 10px;
 }
@@ -165,6 +157,7 @@ select {
   font-size: 0.95rem;
 }
 
+/* ===== Register Button ===== */
 #registerBtn {
   width: 100%;
   padding: 10px;
@@ -180,7 +173,7 @@ select {
   cursor: not-allowed;
 }
 
-/* ===== Registered User List ===== */
+/* ===== Registered List ===== */
 #userList {
   list-style: none;
   margin: 0;
@@ -207,56 +200,52 @@ select {
   background: #b71c1c;
 }
 
-/* ===== Responsive: Portrait ===== */
+/* ===== Added for Update + Count ===== */
+.count-text {
+  margin-bottom: 10px;
+  font-size: 0.95rem;
+  color: #333;
+  font-weight: 600;
+}
+.action-buttons {
+  display: flex;
+  gap: 6px;
+}
+.edit-btn {
+  background: #ffa000;
+  color: white;
+  border: none;
+  border-radius: 6px;
+  padding: 4px 8px;
+  cursor: pointer;
+}
+.edit-btn:hover {
+  background: #ff6f00;
+}
+
+/* ===== Responsive ===== */
 @media (max-width: 900px), (orientation: portrait) {
   .app-container {
     flex-direction: column;
   }
-
   .camera-area {
     width: 100%;
     height: 60vh;
     flex: 0 0 auto;
   }
-
   .menu-panel {
     width: 100%;
     height: 40vh;
     box-shadow: 0 -4px 10px rgba(0, 0, 0, 0.08);
   }
-
   .camera-controls {
     flex-direction: column;
     align-items: stretch;
   }
-
   .menu-buttons {
     flex-direction: column;
   }
-
   .app-title {
     font-size: 1.2rem;
-  }
-}
-
-/* ===== Responsive: Landscape Tablets ===== */
-@media (orientation: landscape) and (max-height: 600px) {
-  .app-container {
-    flex-direction: row;
-  }
-
-  .camera-area {
-    flex: 1 1 65%;
-  }
-
-  .menu-panel {
-    width: 35%;
-    height: 100%;
-    box-shadow: -4px 0 10px rgba(0, 0, 0, 0.08);
-  }
-
-  .camera-controls,
-  .menu-buttons {
-    flex-direction: row;
   }
 }
