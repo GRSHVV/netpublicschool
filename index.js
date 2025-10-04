@@ -416,12 +416,12 @@ async function startRecognition() {
   const users = await window.dbAPI.getAllUsers();
   const links = await window.dbAPI.getAllLinks();
   const children = await window.dbAPI.getAllChildren();
-  if (!users.length) return;
+  if (!users.length) return setStatus("⚠️ No parents registered.");
 
   const labeled = users.map(
     (u) => new faceapi.LabeledFaceDescriptors(u.name, [new Float32Array(u.descriptor)])
   );
-  const matcher = new faceapi.FaceMatcher(labeled, 0.6);
+  const matcher = new faceapi.FaceMatcher(labeled, 0.7); // relaxed threshold
 
   const v = document.getElementById("video");
   const o = document.getElementById("overlay");
@@ -435,12 +435,10 @@ async function startRecognition() {
     if (!modelsLoaded || !v.videoWidth) return;
     const now = Date.now();
 
-    if (lastResult && now - lastResultTime < 3000) {
-      return; // keep old result for 3s
-    }
+    if (lastResult && now - lastResultTime < 3000) return;
 
     const det = await faceapi
-      .detectSingleFace(v, new faceapi.TinyFaceDetectorOptions({ scoreThreshold: 0.5 }))
+      .detectSingleFace(v, new faceapi.TinyFaceDetectorOptions({ scoreThreshold: 0.4 }))
       .withFaceLandmarks()
       .withFaceDescriptor();
 
@@ -494,9 +492,12 @@ async function startRecognition() {
         lastResult = best.label;
       }
       lastResultTime = now;
+    } else {
+      setStatus("No face detected...");
     }
-  }, 400);
+  }, 500);
 }
+
 
 /* =====================================================
    CLEANUP
