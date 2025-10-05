@@ -1,4 +1,4 @@
-// index.js — Smart Pickup System (Final Stable Version All Modules Working)
+// index.js — Smart Pickup System (Async Fixed Final Version)
 // ===========================================================
 
 let currentMode = null;
@@ -257,7 +257,7 @@ async function loadParents() {
 }
 
 /* =====================================================
-   CLASS & SECTION MANAGEMENT (FIXED)
+   CLASS & SECTION MANAGEMENT
 ===================================================== */
 function renderClass(content) {
   content.innerHTML = `
@@ -300,9 +300,9 @@ async function loadSectionList() {
 }
 
 /* =====================================================
-   CHILD REGISTRATION (FIXED)
+   CHILD REGISTRATION (async fixed)
 ===================================================== */
-function renderChild(content) {
+async function renderChild(content) {
   content.innerHTML = `
     <h3>Register Child</h3>
     <label>Name</label><input id="childName" placeholder="name"/>
@@ -337,7 +337,7 @@ async function loadClassSectionOptions(cid, sid) {
 }
 
 /* =====================================================
-   RECOGNITION MODE (Enlarged Result)
+   RECOGNITION MODE (Readable)
 ===================================================== */
 function renderRecognition(content) {
   content.innerHTML = `
