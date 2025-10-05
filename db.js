@@ -7,7 +7,7 @@ window.dbAPI = {
   async openDB() {
     if (this.db) return this.db;
     return new Promise((resolve, reject) => {
-      const request = indexedDB.open("FacePickupDB", 5);
+      const request = indexedDB.open("FacePickupDB", 1);
 
       request.onupgradeneeded = (event) => {
         const db = event.target.result;
@@ -46,10 +46,20 @@ window.dbAPI = {
   },
 
   async getAllUsers() {
-    const tx = this.db.transaction("users", "readonly");
-    const store = tx.objectStore("users");
-    return await store.getAll();
-  },
+  await this.openDB();
+  return new Promise((resolve) => {
+    try {
+      const tx = this.db.transaction("users", "readonly");
+      const req = tx.objectStore("users").getAll();
+      req.onsuccess = () => resolve(req.result || []);
+      req.onerror = () => resolve([]);
+    } catch (e) {
+      console.error("getAllUsers error:", e);
+      resolve([]);
+    }
+  });
+},
+
 
   /* ---------------- CHILDREN ---------------- */
   async addChild(child) {
@@ -139,4 +149,3 @@ window.dbAPI = {
     return await store.getAll();
   },
 };
-
