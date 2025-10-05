@@ -1,5 +1,7 @@
-// index.js — Smart Pickup System (Final Stable Version with lowercase normalization)
-// =====================================================
+// index.js — Smart Pickup System (Final Complete Version)
+// ===========================================================
+// Features: Face Registration, Recognition, Class/Section, Parent-Child Linking
+// Author: Girish Vijayapura (2025)
 
 let currentMode = null;
 let modelsLoaded = false;
@@ -104,14 +106,12 @@ async function switchCamera(deviceId, preferBack = false) {
     v.srcObject = stream;
     currentStream = stream;
 
-    // Detect if it's a back camera
     const track = stream.getVideoTracks()[0];
     const settings = track.getSettings();
     const isBackCamera =
       settings.facingMode === "environment" ||
       /back|rear|environment/i.test(track.label);
 
-    // Flip only for front camera
     v.style.transform = isBackCamera ? "none" : "scaleX(-1)";
 
     v.onloadedmetadata = () => {
@@ -121,16 +121,38 @@ async function switchCamera(deviceId, preferBack = false) {
     };
   } catch (err) {
     console.error("switchCamera error:", err);
-    alert("Failed to access the selected camera.");
+    alert("Failed to access selected camera.");
   }
 }
 
-function resizeOverlay() {
-  const v = document.getElementById("video");
+function matchOverlayToVideo(video) {
   const o = document.getElementById("overlay");
-  if (!v || !o) return;
-  o.width = v.videoWidth || v.offsetWidth;
-  o.height = v.videoHeight || v.offsetHeight;
+  const rect = video.getBoundingClientRect();
+  o.width = rect.width * window.devicePixelRatio;
+  o.height = rect.height * window.devicePixelRatio;
+  o.style.width = rect.width + "px";
+  o.style.height = rect.height + "px";
+}
+
+/* =====================================================
+   DETECTION DRAWING
+===================================================== */
+function drawAlignedDetections(video, overlay, detections) {
+  const ctx = overlay.getContext("2d");
+  ctx.clearRect(0, 0, overlay.width, overlay.height);
+
+  const scaleX = overlay.width / video.videoWidth;
+  const scaleY = overlay.height / video.videoHeight;
+  const isMirrored = video.style.transform.includes("scaleX(-1)");
+
+  detections.forEach((det) => {
+    const { x, y, width, height } = det.detection.box;
+    const drawX = isMirrored ? overlay.width - (x + width) * scaleX : x * scaleX;
+    const drawY = y * scaleY;
+    ctx.strokeStyle = det.color || "green";
+    ctx.lineWidth = 3;
+    ctx.strokeRect(drawX, drawY, width * scaleX, height * scaleY);
+  });
 }
 
 /* =====================================================
@@ -141,7 +163,7 @@ document.addEventListener("DOMContentLoaded", async () => {
   await loadModels();
   await startCamera();
   bindMenuButtons();
-  window.addEventListener("resize", resizeOverlay);
+  window.addEventListener("resize", () => matchOverlayToVideo(document.getElementById("video")));
 });
 
 /* =====================================================
@@ -153,8 +175,6 @@ function bindMenuButtons() {
   document.getElementById("btnClass")?.addEventListener("click", () => switchMode("class"));
   document.getElementById("btnLink")?.addEventListener("click", () => switchMode("link"));
   document.getElementById("btnRecognition")?.addEventListener("click", () => switchMode("recognition"));
-  document.getElementById("btnStartCamera")?.addEventListener("click", () => startCamera());
-  document.getElementById("btnRefreshDevices")?.addEventListener("click", () => getVideoDevices());
 }
 
 /* =====================================================
@@ -165,18 +185,17 @@ function switchMode(mode) {
   clearIntervals();
   const content = document.getElementById("modeContent");
   const cameraArea = document.getElementById("cameraArea");
-  if (!content) return;
   if (["child", "class"].includes(mode)) cameraArea.classList.add("camera-hidden");
   else cameraArea.classList.remove("camera-hidden");
   if (mode === "admin") renderAdmin(content);
   if (mode === "child") renderChild(content);
   if (mode === "class") renderClass(content);
-  if (mode === "link") renderLink(content);
+  if (mode === "link") renderLinkMode(content);
   if (mode === "recognition") renderRecognition(content);
 }
 
 /* =====================================================
-   ADMIN MODE (PARENT REGISTRATION)
+   ADMIN (REGISTER PARENT)
 ===================================================== */
 function renderAdmin(content) {
   content.innerHTML = `
@@ -185,7 +204,7 @@ function renderAdmin(content) {
     <label>Role</label><select id="role"><option>father</option><option>mother</option><option>guardian</option></select>
     <button id="registerBtn" class="primary" disabled>Register</button>
     <ul id="userList"></ul>`;
-  document.getElementById("registerBtn")?.addEventListener("click", registerUser);
+  document.getElementById("registerBtn").addEventListener("click", registerUser);
   detectParentFace();
   loadParents();
 }
@@ -193,23 +212,26 @@ function renderAdmin(content) {
 function detectParentFace() {
   const v = document.getElementById("video");
   const o = document.getElementById("overlay");
-  const ctx = o.getContext("2d");
   const btn = document.getElementById("registerBtn");
   adminDetectInterval = setInterval(async () => {
     if (!modelsLoaded || !v.videoWidth) return;
-    o.width = v.videoWidth; o.height = v.videoHeight;
-    const det = await faceapi.detectSingleFace(v, new faceapi.TinyFaceDetectorOptions({ inputSize: 416, scoreThreshold: 0.3 }))
-      .withFaceLandmarks().withFaceDescriptor();
+    const det = await faceapi
+      .detectSingleFace(v, new faceapi.TinyFaceDetectorOptions({ inputSize: 416, scoreThreshold: 0.35 }))
+      .withFaceLandmarks()
+      .withFaceDescriptor();
+    const ctx = o.getContext("2d");
     ctx.clearRect(0, 0, o.width, o.height);
     if (det) {
-      const resized = faceapi.resizeResults(det, { width: o.width, height: o.height });
-      faceapi.draw.drawDetections(o, resized);
-      lastDetection = det; lastDrawTime = Date.now();
+      drawAlignedDetections(v, o, [det]);
+      lastDetection = det;
+      lastDrawTime = Date.now();
       btn.disabled = !document.getElementById("username").value.trim();
     } else if (Date.now() - lastDrawTime > 3000) {
-      ctx.clearRect(0, 0, o.width, o.height); lastDetection = null; btn.disabled = true;
+      ctx.clearRect(0, 0, o.width, o.height);
+      lastDetection = null;
+      btn.disabled = true;
     }
-  }, 300);
+  }, 250);
 }
 
 async function registerUser() {
@@ -218,7 +240,7 @@ async function registerUser() {
   if (!name || !lastDetection) return alert("Face not detected or name missing!");
   const desc = Array.from(lastDetection.descriptor);
   await window.dbAPI.addUser({ id: Date.now().toString(), name, role, descriptor: desc });
-  alert("Parent registered.");
+  alert("Parent registered successfully!");
   loadParents();
 }
 
@@ -231,152 +253,117 @@ async function loadParents() {
 }
 
 /* =====================================================
-   CHILD REGISTRATION
+   LINK MODE (Parent → Class → Section → Child)
 ===================================================== */
-function renderChild(content) {
+function renderLinkMode(content) {
   content.innerHTML = `
-    <h3>Register Child</h3>
-    <label>Name</label><input id="childName" placeholder="name"/>
-    <label>Class</label><select id="childClass"></select>
-    <label>Section</label><select id="childSection"></select>
-    <button id="addChildBtn" class="primary">Add Child</button>
-    <ul id="childList"></ul>`;
-  document.getElementById("addChildBtn")?.addEventListener("click", addChild);
-  loadClassSectionOptions("childClass", "childSection");
-  loadChildren();
-}
-
-async function addChild() {
-  const name = document.getElementById("childName").value.trim().toLowerCase();
-  const cls = document.getElementById("childClass").value.toLowerCase();
-  const sec = document.getElementById("childSection").value.toLowerCase();
-  if (!name || !cls || !sec) return alert("Fill all fields.");
-  await window.dbAPI.addChild({ id: Date.now().toString(), name, class: cls, section: sec });
-  loadChildren();
-}
-
-async function loadChildren() {
-  const kids = await window.dbAPI.getAllChildren();
-  document.getElementById("childList").innerHTML = kids.length
-    ? kids.map((c) => `<li>${c.name} (${c.class}-${c.section})</li>`).join("")
-    : "<li>No children registered.</li>";
-}
-
-/* =====================================================
-   CLASS & SECTION
-===================================================== */
-function renderClass(content) {
-  content.innerHTML = `
-    <h3>Manage Classes & Sections</h3>
-    <label>Add Class</label><input id="className" placeholder="e.g. 10th"/><button id="addClassBtn">Add</button>
-    <ul id="classList"></ul><hr/>
-    <label>Add Section</label><input id="sectionName" placeholder="e.g. a"/><button id="addSectionBtn">Add</button>
-    <ul id="sectionList"></ul>`;
-  document.getElementById("addClassBtn")?.addEventListener("click", addClass);
-  document.getElementById("addSectionBtn")?.addEventListener("click", addSection);
-  loadClassList(); loadSectionList();
-}
-
-async function addClass() {
-  const name = document.getElementById("className").value.trim().toLowerCase();
-  if (!name) return;
-  await window.dbAPI.addClass(name); loadClassList();
-}
-
-async function addSection() {
-  const name = document.getElementById("sectionName").value.trim().toLowerCase();
-  if (!name) return;
-  await window.dbAPI.addSection(name); loadSectionList();
-}
-
-async function loadClassList() {
-  const list = await window.dbAPI.getAllClasses();
-  document.getElementById("classList").innerHTML = list.length
-    ? list.map((x) => `<li>${x.name}</li>`).join("") : "<li>No classes.</li>";
-}
-
-async function loadSectionList() {
-  const list = await window.dbAPI.getAllSections();
-  document.getElementById("sectionList").innerHTML = list.length
-    ? list.map((x) => `<li>${x.name}</li>`).join("") : "<li>No sections.</li>";
-}
-
-async function loadClassSectionOptions(cid, sid) {
-  const cs = await window.dbAPI.getAllClasses();
-  const ss = await window.dbAPI.getAllSections();
-  document.getElementById(cid).innerHTML = cs.map((c) => `<option>${c.name}</option>`).join("");
-  document.getElementById(sid).innerHTML = ss.map((s) => `<option>${s.name}</option>`).join("");
-}
-
-/* =====================================================
-   LINK MODE
-===================================================== */
-function renderLink(content) {
-  content.innerHTML = `
-    <h3>Link Parent–Child</h3>
-    <label>Parent</label><input id="parentSearch" placeholder="min 3 letters"/>
-    <select id="parentSelect"></select>
-    <label>Child</label><input id="childSearch" placeholder="min 3 letters"/>
-    <select id="childrenSelect" multiple></select>
-    <button id="linkBtn">Link</button><ul id="linkList"></ul>`;
-  setupLinkSearch();
-  document.getElementById("linkBtn")?.addEventListener("click", linkParentChild);
+    <h3>Link Parents & Children</h3>
+    <label>Search Parent (min 3 letters)</label>
+    <input id="parentSearch" placeholder="type first 3 letters" />
+    <select id="parentSelect" size="4" style="width:100%"></select>
+    <label>Select Class</label><select id="linkClass"></select>
+    <label>Select Section</label><select id="linkSection"></select>
+    <label>Search Child (min 3 letters)</label>
+    <input id="childSearch" placeholder="type child name" disabled />
+    <select id="childrenSelect" multiple size="5" style="width:100%"></select>
+    <button id="linkBtn" class="primary">Link Selected</button>
+    <div id="linkHint" style="color:#f59e0b;font-size:0.8rem;"></div>
+    <hr/><ul id="linkList"></ul>`;
+  loadClassSectionOptions("linkClass", "linkSection").then(() => setupLinkHandlers());
   loadLinks();
 }
 
-function setupLinkSearch() {
-  const ps = document.getElementById("parentSearch");
-  const cs = document.getElementById("childSearch");
-  ps.oninput = async () => {
-    const term = ps.value.toLowerCase();
-    const parents = await window.dbAPI.getAllUsers();
-    const sel = document.getElementById("parentSelect");
-    sel.innerHTML = "";
-    if (term.length >= 3)
-      parents.filter((p) => p.name.startsWith(term)).forEach((p) => {
-        const o = document.createElement("option");
-        o.value = p.id; o.textContent = `${p.name} (${p.role})`; sel.appendChild(o);
-      });
-  };
-  cs.oninput = async () => {
-    const term = cs.value.toLowerCase();
-    const children = await window.dbAPI.getAllChildren();
-    const sel = document.getElementById("childrenSelect");
-    sel.innerHTML = "";
-    if (term.length >= 3)
-      children.filter((c) => c.name.startsWith(term)).forEach((c) => {
-        const o = document.createElement("option");
-        o.value = c.id; o.textContent = `${c.name} (${c.class}-${c.section})`; sel.appendChild(o);
-      });
-  };
-}
+function setupLinkHandlers() {
+  const parentSearch = document.getElementById("parentSearch");
+  const parentSelect = document.getElementById("parentSelect");
+  const classSelect = document.getElementById("linkClass");
+  const sectionSelect = document.getElementById("linkSection");
+  const childSearch = document.getElementById("childSearch");
+  const childrenSelect = document.getElementById("childrenSelect");
+  const hint = document.getElementById("linkHint");
 
-async function linkParentChild() {
-  const pid = document.getElementById("parentSelect").value;
-  const childIds = Array.from(document.getElementById("childrenSelect").selectedOptions).map((o) => o.value);
-  if (!pid || !childIds.length) return alert("Select a parent and child.");
-  await window.dbAPI.linkParentChildren(pid, childIds);
-  loadLinks();
+  function updateState() {
+    const ok = parentSelect.value && classSelect.value && sectionSelect.value;
+    childSearch.disabled = !ok;
+    hint.textContent = ok ? "" : "Select parent, class & section first";
+  }
+
+  parentSearch.oninput = async () => {
+    const term = parentSearch.value.trim().toLowerCase();
+    parentSelect.innerHTML = "";
+    if (term.length >= 3) {
+      const parents = await window.dbAPI.getAllUsers();
+      parents
+        .filter((p) => p.name.startsWith(term))
+        .forEach((p) => {
+          const opt = document.createElement("option");
+          opt.value = p.id;
+          opt.textContent = `${p.name} (${p.role})`;
+          parentSelect.appendChild(opt);
+        });
+    }
+    updateState();
+  };
+
+  [parentSelect, classSelect, sectionSelect].forEach((el) =>
+    el.addEventListener("change", updateState)
+  );
+
+  childSearch.oninput = async () => {
+    const term = childSearch.value.trim().toLowerCase();
+    const cls = classSelect.value.toLowerCase();
+    const sec = sectionSelect.value.toLowerCase();
+    childrenSelect.innerHTML = "";
+    if (term.length >= 3) {
+      const allChildren = await window.dbAPI.getAllChildren();
+      allChildren
+        .filter(
+          (c) =>
+            c.name.startsWith(term) &&
+            c.class.toLowerCase() === cls &&
+            c.section.toLowerCase() === sec
+        )
+        .forEach((c) => {
+          const opt = document.createElement("option");
+          opt.value = c.id;
+          opt.textContent = `${c.name} (${c.class}-${c.section})`;
+          childrenSelect.appendChild(opt);
+        });
+    }
+  };
+
+  document.getElementById("linkBtn").onclick = async () => {
+    const parentId = parentSelect.value;
+    const selectedChildren = Array.from(childrenSelect.selectedOptions).map((o) => o.value);
+    if (!parentId || !selectedChildren.length)
+      return alert("Select parent and child to link.");
+    await window.dbAPI.linkParentChildren(parentId, selectedChildren);
+    alert("Linked successfully!");
+    loadLinks();
+  };
 }
 
 async function loadLinks() {
+  const list = document.getElementById("linkList");
   const links = await window.dbAPI.getAllLinks();
   const parents = await window.dbAPI.getAllUsers();
   const children = await window.dbAPI.getAllChildren();
-  document.getElementById("linkList").innerHTML = links
+  list.innerHTML = links
     .map((l) => {
       const p = parents.find((x) => x.id === l.parentId);
-      const kids = l.childrenIds.map((cid) => {
-        const c = children.find((ch) => ch.id === cid);
-        return c ? `${c.name} (${c.class}-${c.section})` : "";
-      }).join(", ");
+      const kids = (l.childrenIds || [])
+        .map((cid) => {
+          const ch = children.find((c) => c.id === cid);
+          return ch ? `${ch.name} (${ch.class}-${ch.section})` : "";
+        })
+        .join(", ");
       return `<li><strong>${p?.name}</strong> → ${kids}</li>`;
     })
-    .join("");
+    .join("") || "<li>No links found.</li>";
 }
 
 /* =====================================================
-   RECOGNITION
+   FACE RECOGNITION
 ===================================================== */
 async function renderRecognition(content) {
   content.innerHTML = `<h3>Recognition</h3><div id="recognitionResult"></div>`;
@@ -389,35 +376,51 @@ async function startRecognition() {
   const users = await window.dbAPI.getAllUsers();
   const links = await window.dbAPI.getAllLinks();
   const children = await window.dbAPI.getAllChildren();
-  if (!users.length) return setStatus("⚠️ No parents found.");
-  const labeled = users.map((u) => new faceapi.LabeledFaceDescriptors(u.name, [new Float32Array(u.descriptor)]));
+  if (!users.length) return setStatus("⚠️ No registered parents found.");
+
+  const labeled = users.map(
+    (u) => new faceapi.LabeledFaceDescriptors(u.name, [new Float32Array(u.descriptor)])
+  );
   const matcher = new faceapi.FaceMatcher(labeled, 0.6);
+
   const v = document.getElementById("video");
   const o = document.getElementById("overlay");
   const ctx = o.getContext("2d");
   const resultBox = document.getElementById("recognitionResult");
+
   recognitionInterval = setInterval(async () => {
     if (!modelsLoaded || !v.videoWidth) return;
-    o.width = v.videoWidth; o.height = v.videoHeight;
-    const det = await faceapi.detectSingleFace(v, new faceapi.TinyFaceDetectorOptions({ inputSize: 416, scoreThreshold: 0.3 }))
-      .withFaceLandmarks().withFaceDescriptor();
+    const det = await faceapi
+      .detectSingleFace(v, new faceapi.TinyFaceDetectorOptions({ inputSize: 416, scoreThreshold: 0.3 }))
+      .withFaceLandmarks()
+      .withFaceDescriptor();
+
     ctx.clearRect(0, 0, o.width, o.height);
     if (!det) return;
-    const resized = faceapi.resizeResults(det, { width: o.width, height: o.height });
+
+    drawAlignedDetections(v, o, [det]);
     const best = matcher.findBestMatch(det.descriptor);
-    const box = resized.detection.box;
     if (best.label === "unknown") {
-      ctx.strokeStyle = "red"; ctx.lineWidth = 3; ctx.strokeRect(box.x, box.y, box.width, box.height);
-      resultBox.innerHTML = `<p style='color:red'>❌ Unrecognized face</p>`;
-    } else {
-      ctx.strokeStyle = "green"; ctx.lineWidth = 3; ctx.strokeRect(box.x, box.y, box.width, box.height);
-      const parent = users.find((u) => u.name === best.label);
-      const link = links.find((l) => l.parentId === parent?.id);
-      const kidsHtml = (link?.childrenIds || []).map((cid) => {
+      resultBox.innerHTML = `<p style='color:red;font-weight:bold;'>❌ Unrecognized face</p>`;
+      return;
+    }
+
+    const parent = users.find((u) => u.name === best.label);
+    const link = links.find((l) => l.parentId === parent?.id);
+    const kidsHtml = (link?.childrenIds || [])
+      .map((cid) => {
         const ch = children.find((c) => c.id === cid);
         return ch ? `<li>${ch.name} (${ch.class}-${ch.section})</li>` : "";
-      }).join("");
-      resultBox.innerHTML = `<p style='color:green'>✅ ${best.label}</p><ul>${kidsHtml}</ul>`;
-    }
+      })
+      .join("");
+
+    resultBox.innerHTML = `
+      <p style='color:green;font-weight:bold;'>✅ Recognized: ${best.label}</p>
+      ${
+        kidsHtml
+          ? `<p><strong>Linked Children:</strong></p><ul>${kidsHtml}</ul>`
+          : "<p>No linked children found</p>"
+      }
+    `;
   }, 400);
 }
