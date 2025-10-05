@@ -1,5 +1,6 @@
-// index.js — Smart Pickup System (Final Full Version)
-// ================================================
+// index.js — Smart Pickup System (Final Version with Enlarged Recognition Status)
+// ===========================================================
+
 let currentMode = null;
 let modelsLoaded = false;
 let currentStream = null;
@@ -34,13 +35,13 @@ async function loadModels() {
 }
 
 /* =====================================================
-   CAMERA
+   CAMERA HANDLING
 ===================================================== */
 async function ensureCameraPermission() {
   try {
     await navigator.mediaDevices.getUserMedia({ video: true });
   } catch (err) {
-    alert("Camera permission required. Please enable it.");
+    alert("Camera permission required.");
     throw err;
   }
 }
@@ -121,29 +122,23 @@ function matchOverlayToVideo(video) {
   overlay.style.width = rect.width + "px";
   overlay.style.height = rect.height + "px";
 }
-
-// Draw bounding boxes with color (green = known, red = unknown)
 function drawAlignedDetections(video, overlay, detections, color = "lime") {
   if (!video || !overlay) return;
   const ctx = overlay.getContext("2d");
   ctx.clearRect(0, 0, overlay.width, overlay.height);
   if (!video.videoWidth || !video.videoHeight) return;
-
   const dpr = window.devicePixelRatio || 1;
   const vw = video.videoWidth;
   const vh = video.videoHeight;
   const ow = overlay.width / dpr;
   const oh = overlay.height / dpr;
-
   const scaleX = ow / vw;
   const scaleY = oh / vh;
   const isMirrored = (video.style.transform || "").includes("scaleX(-1)");
-
   ctx.save();
   ctx.lineWidth = 3 * dpr;
   ctx.strokeStyle = color;
   ctx.scale(dpr, dpr);
-
   detections.forEach((det) => {
     if (!det?.detection) return;
     const box = det.detection.box;
@@ -156,7 +151,6 @@ function drawAlignedDetections(video, overlay, detections, color = "lime") {
     ctx.rect(x, y, w, h);
     ctx.stroke();
   });
-
   ctx.restore();
 }
 
@@ -260,200 +254,23 @@ async function loadParents() {
 }
 
 /* =====================================================
-   CLASS & SECTION MANAGEMENT
-===================================================== */
-function renderClass(content) {
-  content.innerHTML = `
-    <h3>Manage Classes & Sections</h3>
-    <label>Add Class</label><input id="className" placeholder="e.g. 10th"/>
-    <button id="addClassBtn">Add</button>
-    <ul id="classList"></ul><hr/>
-    <label>Add Section</label><input id="sectionName" placeholder="e.g. a"/>
-    <button id="addSectionBtn">Add</button>
-    <ul id="sectionList"></ul>`;
-  safeGet("addClassBtn")?.addEventListener("click", addClass);
-  safeGet("addSectionBtn")?.addEventListener("click", addSection);
-  loadClassList();
-  loadSectionList();
-}
-async function addClass() {
-  const name = safeGet("className").value.trim().toLowerCase();
-  if (!name) return;
-  await window.dbAPI.addClass(name);
-  safeGet("className").value = "";
-  loadClassList();
-}
-async function addSection() {
-  const name = safeGet("sectionName").value.trim().toLowerCase();
-  if (!name) return;
-  await window.dbAPI.addSection(name);
-  safeGet("sectionName").value = "";
-  loadSectionList();
-}
-async function loadClassList() {
-  const list = safeGet("classList");
-  const classes = await window.dbAPI.getAllClasses();
-  list.innerHTML = classes.length
-    ? classes.map((x) => `<li>${x.name}</li>`).join("")
-    : "<li>No classes.</li>";
-}
-async function loadSectionList() {
-  const list = safeGet("sectionList");
-  const sections = await window.dbAPI.getAllSections();
-  list.innerHTML = sections.length
-    ? sections.map((x) => `<li>${x.name}</li>`).join("")
-    : "<li>No sections.</li>";
-}
-
-/* =====================================================
-   CHILD REGISTRATION
-===================================================== */
-function renderChild(content) {
-  content.innerHTML = `
-    <h3>Register Child</h3>
-    <label>Name</label><input id="childName" placeholder="name"/>
-    <label>Class</label><select id="childClass"></select>
-    <label>Section</label><select id="childSection"></select>
-    <button id="addChildBtn" class="primary">Add Child</button>
-    <ul id="childList"></ul>`;
-  safeGet("addChildBtn")?.addEventListener("click", addChild);
-  loadClassSectionOptions("childClass", "childSection");
-  loadChildren();
-}
-async function addChild() {
-  const name = safeGet("childName").value.trim().toLowerCase();
-  const cls = safeGet("childClass").value.toLowerCase();
-  const sec = safeGet("childSection").value.toLowerCase();
-  if (!name || !cls || !sec) return alert("Fill all fields.");
-  await window.dbAPI.addChild({ id: Date.now().toString(), name, class: cls, section: sec });
-  safeGet("childName").value = "";
-  loadChildren();
-}
-async function loadChildren() {
-  const kids = await window.dbAPI.getAllChildren();
-  safeGet("childList").innerHTML = kids.length
-    ? kids.map((c) => `<li>${c.name} (${c.class}-${c.section})</li>`).join("")
-    : "<li>No children registered.</li>";
-}
-async function loadClassSectionOptions(cid, sid) {
-  const cs = await window.dbAPI.getAllClasses();
-  const ss = await window.dbAPI.getAllSections();
-  safeGet(cid).innerHTML = cs.map((c) => `<option>${c.name}</option>`).join("");
-  safeGet(sid).innerHTML = ss.map((s) => `<option>${s.name}</option>`).join("");
-}
-
-/* =====================================================
-   LINK MODE (Parent -> Class -> Section -> Child)
-===================================================== */
-function renderLinkMode(content) {
-  content.innerHTML = `
-    <h3>Link Parents & Children</h3>
-    <label>Search Parent</label>
-    <input id="parentSearch" placeholder="Type first 3 letters..."/>
-    <select id="parentSelect" size="4"></select>
-    <label>Class</label><select id="linkClass"></select>
-    <label>Section</label><select id="linkSection"></select>
-    <label>Search Child</label>
-    <input id="childSearch" placeholder="Type first 3 letters..." disabled/>
-    <select id="childrenSelect" multiple size="6"></select>
-    <button id="linkBtn" class="primary">Link Selected</button>
-    <ul id="linkList"></ul>`;
-  loadClassSectionOptions("linkClass", "linkSection").then(setupLinkHandlers);
-  loadLinks();
-}
-function setupLinkHandlers() {
-  const parentSearch = safeGet("parentSearch");
-  const parentSelect = safeGet("parentSelect");
-  const classSelect = safeGet("linkClass");
-  const sectionSelect = safeGet("linkSection");
-  const childSearch = safeGet("childSearch");
-  const childrenSelect = safeGet("childrenSelect");
-  function updateState() {
-    const enabled = parentSelect.value && classSelect.value && sectionSelect.value;
-    childSearch.disabled = !enabled;
-  }
-  parentSearch.oninput = async () => {
-    const term = parentSearch.value.trim().toLowerCase();
-    parentSelect.innerHTML = "";
-    if (term.length >= 3) {
-      const parents = await window.dbAPI.getAllUsers();
-      const matches = parents.filter((p) => p.name.startsWith(term));
-      matches.forEach((p) => {
-        const o = document.createElement("option");
-        o.value = p.id;
-        o.textContent = `${p.name} (${p.role})`;
-        parentSelect.appendChild(o);
-      });
-    }
-    updateState();
-  };
-  [parentSelect, classSelect, sectionSelect].forEach((el) =>
-    el.addEventListener("change", updateState)
-  );
-  childSearch.oninput = async () => {
-    const term = childSearch.value.trim().toLowerCase();
-    const cls = classSelect.value.toLowerCase();
-    const sec = sectionSelect.value.toLowerCase();
-    childrenSelect.innerHTML = "";
-    if (term.length >= 3) {
-      const all = await window.dbAPI.getAllChildren();
-      const matches = all.filter(
-        (c) =>
-          c.name.startsWith(term) &&
-          c.class.toLowerCase() === cls &&
-          c.section.toLowerCase() === sec
-      );
-      matches.forEach((c) => {
-        const o = document.createElement("option");
-        o.value = c.id;
-        o.textContent = `${c.name} (${c.class}-${c.section})`;
-        childrenSelect.appendChild(o);
-      });
-    }
-  };
-  safeGet("linkBtn").onclick = async () => {
-    const parentId = parentSelect.value;
-    const selected = Array.from(childrenSelect.selectedOptions).map((o) => o.value);
-    if (!parentId || !selected.length) return alert("Select parent and children.");
-    await window.dbAPI.linkParentChildren(parentId, selected);
-    alert("Linked!");
-    loadLinks();
-  };
-}
-async function loadLinks() {
-  const list = safeGet("linkList");
-  const links = await window.dbAPI.getAllLinks();
-  const parents = await window.dbAPI.getAllUsers();
-  const children = await window.dbAPI.getAllChildren();
-  list.innerHTML = links.length
-    ? links
-        .map((l) => {
-          const p = parents.find((x) => x.id === l.parentId);
-          const kids = l.childrenIds
-            .map((cid) => {
-              const c = children.find((y) => y.id === cid);
-              return c ? `${c.name} (${c.class}-${c.section})` : "";
-            })
-            .join(", ");
-          return `<li>${p ? p.name : "(unknown)"} → ${kids}</li>`;
-        })
-        .join("")
-    : "<li>No links found.</li>";
-}
-
-/* =====================================================
-   RECOGNITION MODE (Green = registered, Red = unknown)
+   RECOGNITION MODE (Larger Font & Highlighted)
 ===================================================== */
 function renderRecognition(content) {
   content.innerHTML = `
     <h3>Recognition</h3>
-    <div id="recognitionResult" class="result-box"></div>`;
+    <div id="recognitionResult" class="result-box" 
+      style="font-size: 1.3rem; font-weight: 600; padding: 15px; border-radius: 10px;
+      background: #f9fafb; color: #222; min-height: 120px;">
+      Waiting for face...
+    </div>`;
   const back = videoDevices.find((d) =>
     /back|rear|environment/i.test((d.label || "").toLowerCase())
   );
   if (back) switchCamera(back.deviceId, true).catch(() => {});
   startRecognition();
 }
+
 async function startRecognition() {
   if (recognitionInterval) clearInterval(recognitionInterval);
   const users = await window.dbAPI.getAllUsers();
@@ -471,33 +288,51 @@ async function startRecognition() {
   const v = safeGet("video");
   const o = safeGet("overlay");
   const resultBox = safeGet("recognitionResult");
+
   recognitionInterval = setInterval(async () => {
     if (!modelsLoaded || !v.videoWidth) return;
     const det = await faceapi
       .detectSingleFace(v, new faceapi.TinyFaceDetectorOptions({ inputSize: 416, scoreThreshold: 0.32 }))
       .withFaceLandmarks()
       .withFaceDescriptor();
+
     const ctx = o.getContext("2d");
     ctx.clearRect(0, 0, o.width, o.height);
     if (!det) return;
+
     const best = matcher.findBestMatch(det.descriptor);
     let color = best.label === "unknown" ? "red" : "lime";
     drawAlignedDetections(v, o, [det], color);
+
     if (best.label === "unknown") {
-      resultBox.innerHTML = `<p style="color:red;font-weight:700;">❌ Unrecognized Face</p>`;
+      resultBox.innerHTML = `
+        <div style="background:#fee2e2;padding:15px;border-radius:10px;color:#b91c1c;">
+          <h2>❌ Unrecognized Face</h2>
+          <p>Please check registration.</p>
+        </div>`;
       return;
     }
+
     const parent = users.find((u) => u.name === best.label);
     const link = links.find((l) => l.parentId === parent?.id);
     const kidsHtml = (link?.childrenIds || [])
       .map((cid) => {
         const c = children.find((ch) => ch.id === cid);
-        return c ? `<li>${c.name} (${c.class}-${c.section})</li>` : "";
+        return c
+          ? `<li style="font-size:1.2rem;line-height:1.6;">👧 ${c.name} (${c.class}-${c.section})</li>`
+          : "";
       })
       .join("");
+
     resultBox.innerHTML = `
-      <p style="color:green;font-weight:700;">✅ Recognized: ${best.label}</p>
-      ${kidsHtml ? `<ul>${kidsHtml}</ul>` : "<p>No linked children</p>"}`;
+      <div style="background:#dcfce7;padding:15px;border-radius:10px;color:#166534;">
+        <h2>✅ Recognized: ${best.label}</h2>
+        ${
+          kidsHtml
+            ? `<h3>Linked Children:</h3><ul style="margin-top:5px;">${kidsHtml}</ul>`
+            : "<p>No linked children found.</p>"
+        }
+      </div>`;
   }, 350);
 }
 
