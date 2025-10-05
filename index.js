@@ -1,6 +1,5 @@
-// index.js — Smart Pickup System (Full Version)
-// Includes bounding box color for recognized (green) / unrecognized (red) faces
-
+// index.js — Smart Pickup System (Final Full Version)
+// ================================================
 let currentMode = null;
 let modelsLoaded = false;
 let currentStream = null;
@@ -41,7 +40,7 @@ async function ensureCameraPermission() {
   try {
     await navigator.mediaDevices.getUserMedia({ video: true });
   } catch (err) {
-    alert("Camera permission required.");
+    alert("Camera permission required. Please enable it.");
     throw err;
   }
 }
@@ -49,6 +48,7 @@ async function getVideoDevices() {
   const devices = await navigator.mediaDevices.enumerateDevices();
   videoDevices = devices.filter((d) => d.kind === "videoinput");
   const select = safeGet("cameraSelect");
+  if (!select) return;
   select.innerHTML = "";
   videoDevices.forEach((device, i) => {
     const opt = document.createElement("option");
@@ -89,6 +89,7 @@ async function switchCamera(deviceId, preferBack = false) {
 
     const stream = await navigator.mediaDevices.getUserMedia(constraints);
     const v = safeGet("video");
+    if (!v) return;
     v.srcObject = stream;
     currentStream = stream;
     const track = stream.getVideoTracks()[0];
@@ -121,7 +122,7 @@ function matchOverlayToVideo(video) {
   overlay.style.height = rect.height + "px";
 }
 
-// Draw bounding boxes with custom color
+// Draw bounding boxes with color (green = known, red = unknown)
 function drawAlignedDetections(video, overlay, detections, color = "lime") {
   if (!video || !overlay) return;
   const ctx = overlay.getContext("2d");
@@ -259,31 +260,207 @@ async function loadParents() {
 }
 
 /* =====================================================
-   CLASS & SECTION MGMT + CHILD REGISTRATION + LINK MODE
-   (same as before)
+   CLASS & SECTION MANAGEMENT
 ===================================================== */
-// — keep your previous working versions for these modules —
+function renderClass(content) {
+  content.innerHTML = `
+    <h3>Manage Classes & Sections</h3>
+    <label>Add Class</label><input id="className" placeholder="e.g. 10th"/>
+    <button id="addClassBtn">Add</button>
+    <ul id="classList"></ul><hr/>
+    <label>Add Section</label><input id="sectionName" placeholder="e.g. a"/>
+    <button id="addSectionBtn">Add</button>
+    <ul id="sectionList"></ul>`;
+  safeGet("addClassBtn")?.addEventListener("click", addClass);
+  safeGet("addSectionBtn")?.addEventListener("click", addSection);
+  loadClassList();
+  loadSectionList();
+}
+async function addClass() {
+  const name = safeGet("className").value.trim().toLowerCase();
+  if (!name) return;
+  await window.dbAPI.addClass(name);
+  safeGet("className").value = "";
+  loadClassList();
+}
+async function addSection() {
+  const name = safeGet("sectionName").value.trim().toLowerCase();
+  if (!name) return;
+  await window.dbAPI.addSection(name);
+  safeGet("sectionName").value = "";
+  loadSectionList();
+}
+async function loadClassList() {
+  const list = safeGet("classList");
+  const classes = await window.dbAPI.getAllClasses();
+  list.innerHTML = classes.length
+    ? classes.map((x) => `<li>${x.name}</li>`).join("")
+    : "<li>No classes.</li>";
+}
+async function loadSectionList() {
+  const list = safeGet("sectionList");
+  const sections = await window.dbAPI.getAllSections();
+  list.innerHTML = sections.length
+    ? sections.map((x) => `<li>${x.name}</li>`).join("")
+    : "<li>No sections.</li>";
+}
 
 /* =====================================================
-   RECOGNITION MODE (WITH COLOR-CODED BOXES)
+   CHILD REGISTRATION
+===================================================== */
+function renderChild(content) {
+  content.innerHTML = `
+    <h3>Register Child</h3>
+    <label>Name</label><input id="childName" placeholder="name"/>
+    <label>Class</label><select id="childClass"></select>
+    <label>Section</label><select id="childSection"></select>
+    <button id="addChildBtn" class="primary">Add Child</button>
+    <ul id="childList"></ul>`;
+  safeGet("addChildBtn")?.addEventListener("click", addChild);
+  loadClassSectionOptions("childClass", "childSection");
+  loadChildren();
+}
+async function addChild() {
+  const name = safeGet("childName").value.trim().toLowerCase();
+  const cls = safeGet("childClass").value.toLowerCase();
+  const sec = safeGet("childSection").value.toLowerCase();
+  if (!name || !cls || !sec) return alert("Fill all fields.");
+  await window.dbAPI.addChild({ id: Date.now().toString(), name, class: cls, section: sec });
+  safeGet("childName").value = "";
+  loadChildren();
+}
+async function loadChildren() {
+  const kids = await window.dbAPI.getAllChildren();
+  safeGet("childList").innerHTML = kids.length
+    ? kids.map((c) => `<li>${c.name} (${c.class}-${c.section})</li>`).join("")
+    : "<li>No children registered.</li>";
+}
+async function loadClassSectionOptions(cid, sid) {
+  const cs = await window.dbAPI.getAllClasses();
+  const ss = await window.dbAPI.getAllSections();
+  safeGet(cid).innerHTML = cs.map((c) => `<option>${c.name}</option>`).join("");
+  safeGet(sid).innerHTML = ss.map((s) => `<option>${s.name}</option>`).join("");
+}
+
+/* =====================================================
+   LINK MODE (Parent -> Class -> Section -> Child)
+===================================================== */
+function renderLinkMode(content) {
+  content.innerHTML = `
+    <h3>Link Parents & Children</h3>
+    <label>Search Parent</label>
+    <input id="parentSearch" placeholder="Type first 3 letters..."/>
+    <select id="parentSelect" size="4"></select>
+    <label>Class</label><select id="linkClass"></select>
+    <label>Section</label><select id="linkSection"></select>
+    <label>Search Child</label>
+    <input id="childSearch" placeholder="Type first 3 letters..." disabled/>
+    <select id="childrenSelect" multiple size="6"></select>
+    <button id="linkBtn" class="primary">Link Selected</button>
+    <ul id="linkList"></ul>`;
+  loadClassSectionOptions("linkClass", "linkSection").then(setupLinkHandlers);
+  loadLinks();
+}
+function setupLinkHandlers() {
+  const parentSearch = safeGet("parentSearch");
+  const parentSelect = safeGet("parentSelect");
+  const classSelect = safeGet("linkClass");
+  const sectionSelect = safeGet("linkSection");
+  const childSearch = safeGet("childSearch");
+  const childrenSelect = safeGet("childrenSelect");
+  function updateState() {
+    const enabled = parentSelect.value && classSelect.value && sectionSelect.value;
+    childSearch.disabled = !enabled;
+  }
+  parentSearch.oninput = async () => {
+    const term = parentSearch.value.trim().toLowerCase();
+    parentSelect.innerHTML = "";
+    if (term.length >= 3) {
+      const parents = await window.dbAPI.getAllUsers();
+      const matches = parents.filter((p) => p.name.startsWith(term));
+      matches.forEach((p) => {
+        const o = document.createElement("option");
+        o.value = p.id;
+        o.textContent = `${p.name} (${p.role})`;
+        parentSelect.appendChild(o);
+      });
+    }
+    updateState();
+  };
+  [parentSelect, classSelect, sectionSelect].forEach((el) =>
+    el.addEventListener("change", updateState)
+  );
+  childSearch.oninput = async () => {
+    const term = childSearch.value.trim().toLowerCase();
+    const cls = classSelect.value.toLowerCase();
+    const sec = sectionSelect.value.toLowerCase();
+    childrenSelect.innerHTML = "";
+    if (term.length >= 3) {
+      const all = await window.dbAPI.getAllChildren();
+      const matches = all.filter(
+        (c) =>
+          c.name.startsWith(term) &&
+          c.class.toLowerCase() === cls &&
+          c.section.toLowerCase() === sec
+      );
+      matches.forEach((c) => {
+        const o = document.createElement("option");
+        o.value = c.id;
+        o.textContent = `${c.name} (${c.class}-${c.section})`;
+        childrenSelect.appendChild(o);
+      });
+    }
+  };
+  safeGet("linkBtn").onclick = async () => {
+    const parentId = parentSelect.value;
+    const selected = Array.from(childrenSelect.selectedOptions).map((o) => o.value);
+    if (!parentId || !selected.length) return alert("Select parent and children.");
+    await window.dbAPI.linkParentChildren(parentId, selected);
+    alert("Linked!");
+    loadLinks();
+  };
+}
+async function loadLinks() {
+  const list = safeGet("linkList");
+  const links = await window.dbAPI.getAllLinks();
+  const parents = await window.dbAPI.getAllUsers();
+  const children = await window.dbAPI.getAllChildren();
+  list.innerHTML = links.length
+    ? links
+        .map((l) => {
+          const p = parents.find((x) => x.id === l.parentId);
+          const kids = l.childrenIds
+            .map((cid) => {
+              const c = children.find((y) => y.id === cid);
+              return c ? `${c.name} (${c.class}-${c.section})` : "";
+            })
+            .join(", ");
+          return `<li>${p ? p.name : "(unknown)"} → ${kids}</li>`;
+        })
+        .join("")
+    : "<li>No links found.</li>";
+}
+
+/* =====================================================
+   RECOGNITION MODE (Green = registered, Red = unknown)
 ===================================================== */
 function renderRecognition(content) {
   content.innerHTML = `
     <h3>Recognition</h3>
-    <div id="recognitionResult" class="result-box"></div>
-  `;
-  const back = videoDevices.find((d) => /back|rear|environment/i.test((d.label || "").toLowerCase()));
+    <div id="recognitionResult" class="result-box"></div>`;
+  const back = videoDevices.find((d) =>
+    /back|rear|environment/i.test((d.label || "").toLowerCase())
+  );
   if (back) switchCamera(back.deviceId, true).catch(() => {});
   startRecognition();
 }
-
 async function startRecognition() {
   if (recognitionInterval) clearInterval(recognitionInterval);
   const users = await window.dbAPI.getAllUsers();
   const links = await window.dbAPI.getAllLinks();
   const children = await window.dbAPI.getAllChildren();
   if (!users.length) {
-    setStatus("No parents registered.");
+    setStatus("No registered parents.");
     safeGet("recognitionResult").innerHTML = "<p>No registered parents</p>";
     return;
   }
@@ -320,8 +497,7 @@ async function startRecognition() {
       .join("");
     resultBox.innerHTML = `
       <p style="color:green;font-weight:700;">✅ Recognized: ${best.label}</p>
-      ${kidsHtml ? `<ul>${kidsHtml}</ul>` : "<p>No linked children</p>"}
-    `;
+      ${kidsHtml ? `<ul>${kidsHtml}</ul>` : "<p>No linked children</p>"}`;
   }, 350);
 }
 
