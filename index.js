@@ -167,24 +167,46 @@ function drawAlignedDetections(video, overlay, detections) {
   const ctx = overlay.getContext("2d");
   ctx.clearRect(0, 0, overlay.width, overlay.height);
 
-  // If video has no resolution yet, bail
   if (!video.videoWidth || !video.videoHeight) return;
 
-  const scaleX = overlay.width / video.videoWidth;
-  const scaleY = overlay.height / video.videoHeight;
+  const dpr = window.devicePixelRatio || 1;
+  const vw = video.videoWidth;
+  const vh = video.videoHeight;
+  const ow = overlay.width / dpr;
+  const oh = overlay.height / dpr;
+
+  // Compute scale ratios based on actual rendered size, not intrinsic size
+  const scaleX = ow / vw;
+  const scaleY = oh / vh;
   const isMirrored = (video.style.transform || "").includes("scaleX(-1)");
+
+  ctx.save();
+  ctx.lineWidth = 3 * dpr;
+  ctx.strokeStyle = "lime";
+  ctx.translate(0, 0);
+  ctx.scale(dpr, dpr);
 
   detections.forEach((det) => {
     if (!det || !det.detection) return;
     const box = det.detection.box;
-    const x = box.x, y = box.y, w = box.width, h = box.height;
-    const drawX = isMirrored ? overlay.width - (x + w) * scaleX : x * scaleX;
-    const drawY = y * scaleY;
-    ctx.lineWidth = 3;
-    ctx.strokeStyle = det.color || "lime";
-    ctx.strokeRect(drawX, drawY, w * scaleX, h * scaleY);
+    let x = box.x * scaleX;
+    let y = box.y * scaleY;
+    let w = box.width * scaleX;
+    let h = box.height * scaleY;
+
+    // Flip horizontally only if front camera
+    if (isMirrored) {
+      x = ow - x - w;
+    }
+
+    ctx.beginPath();
+    ctx.rect(x, y, w, h);
+    ctx.stroke();
   });
+
+  ctx.restore();
 }
+
 
 /* =====================================================
    INITIALIZE APP
