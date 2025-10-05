@@ -1,4 +1,4 @@
-// index.js — Smart Pickup System (Async Fixed Final Version)
+// index.js — Smart Pickup System (Full Stable Build with Working Linking & Recognition)
 // ===========================================================
 
 let currentMode = null;
@@ -264,8 +264,7 @@ function renderClass(content) {
     <h3>Manage Classes & Sections</h3>
     <label>Add Class</label><input id="className" placeholder="e.g. 10th"/>
     <button id="addClassBtn">Add</button>
-    <ul id="classList"></ul>
-    <hr/>
+    <ul id="classList"></ul><hr/>
     <label>Add Section</label><input id="sectionName" placeholder="e.g. a"/>
     <button id="addSectionBtn">Add</button>
     <ul id="sectionList"></ul>`;
@@ -300,7 +299,7 @@ async function loadSectionList() {
 }
 
 /* =====================================================
-   CHILD REGISTRATION (async fixed)
+   CHILD REGISTRATION
 ===================================================== */
 async function renderChild(content) {
   content.innerHTML = `
@@ -337,7 +336,113 @@ async function loadClassSectionOptions(cid, sid) {
 }
 
 /* =====================================================
-   RECOGNITION MODE (Readable)
+   LINK PARENT–CHILD MODULE (FIXED)
+===================================================== */
+async function renderLinkMode(content) {
+  content.innerHTML = `
+    <h3>Link Parents & Children</h3>
+    <label>Search Parent</label>
+    <input id="parentSearch" placeholder="Type first 3 letters..."/>
+    <select id="parentSelect" size="4"></select>
+    <label>Class</label><select id="linkClass"></select>
+    <label>Section</label><select id="linkSection"></select>
+    <label>Search Child</label>
+    <input id="childSearch" placeholder="Type first 3 letters..." disabled/>
+    <select id="childrenSelect" multiple size="6"></select>
+    <button id="linkBtn" class="primary">Link Selected</button>
+    <ul id="linkList"></ul>`;
+  await loadClassSectionOptions("linkClass", "linkSection");
+  setupLinkHandlers();
+  loadLinks();
+}
+function setupLinkHandlers() {
+  const parentSearch = safeGet("parentSearch");
+  const parentSelect = safeGet("parentSelect");
+  const classSelect = safeGet("linkClass");
+  const sectionSelect = safeGet("linkSection");
+  const childSearch = safeGet("childSearch");
+  const childrenSelect = safeGet("childrenSelect");
+  const linkBtn = safeGet("linkBtn");
+
+  function updateState() {
+    const enabled = parentSelect.value && classSelect.value && sectionSelect.value;
+    childSearch.disabled = !enabled;
+  }
+
+  parentSearch.oninput = async () => {
+    const term = parentSearch.value.trim().toLowerCase();
+    parentSelect.innerHTML = "";
+    if (term.length >= 3) {
+      const parents = await window.dbAPI.getAllUsers();
+      const matches = parents.filter((p) => p.name.startsWith(term));
+      matches.forEach((p) => {
+        const o = document.createElement("option");
+        o.value = p.id;
+        o.textContent = `${p.name} (${p.role})`;
+        parentSelect.appendChild(o);
+      });
+    }
+    updateState();
+  };
+
+  [parentSelect, classSelect, sectionSelect].forEach((el) =>
+    el.addEventListener("change", updateState)
+  );
+
+  childSearch.oninput = async () => {
+    const term = childSearch.value.trim().toLowerCase();
+    const cls = classSelect.value.toLowerCase();
+    const sec = sectionSelect.value.toLowerCase();
+    childrenSelect.innerHTML = "";
+    if (term.length >= 3) {
+      const all = await window.dbAPI.getAllChildren();
+      const matches = all.filter(
+        (c) =>
+          c.name.startsWith(term) &&
+          c.class.toLowerCase() === cls &&
+          c.section.toLowerCase() === sec
+      );
+      matches.forEach((c) => {
+        const o = document.createElement("option");
+        o.value = c.id;
+        o.textContent = `${c.name} (${c.class}-${c.section})`;
+        childrenSelect.appendChild(o);
+      });
+    }
+  };
+
+  linkBtn.onclick = async () => {
+    const parentId = parentSelect.value;
+    const selected = Array.from(childrenSelect.selectedOptions).map((o) => o.value);
+    if (!parentId || !selected.length) return alert("Select parent and children first!");
+    await window.dbAPI.linkParentChildren(parentId, selected);
+    alert("Parent linked successfully!");
+    loadLinks();
+  };
+}
+async function loadLinks() {
+  const list = safeGet("linkList");
+  const links = await window.dbAPI.getAllLinks();
+  const parents = await window.dbAPI.getAllUsers();
+  const children = await window.dbAPI.getAllChildren();
+  list.innerHTML = links.length
+    ? links
+        .map((l) => {
+          const p = parents.find((x) => x.id === l.parentId);
+          const kids = l.childrenIds
+            .map((cid) => {
+              const c = children.find((y) => y.id === cid);
+              return c ? `${c.name} (${c.class}-${c.section})` : "";
+            })
+            .join(", ");
+          return `<li>${p ? p.name : "(unknown)"} → ${kids}</li>`;
+        })
+        .join("")
+    : "<li>No links found.</li>";
+}
+
+/* =====================================================
+   RECOGNITION MODE
 ===================================================== */
 function renderRecognition(content) {
   content.innerHTML = `
