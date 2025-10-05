@@ -86,26 +86,42 @@ async function startCamera() {
 
 async function switchCamera(deviceId, preferBack = false) {
   try {
-    if (currentStream) currentStream.getTracks().forEach((t) => t.stop());
+    if (currentStream) {
+      currentStream.getTracks().forEach((t) => t.stop());
+      currentStream = null;
+    }
+
     let constraints;
     if (preferBack)
       constraints = { video: { facingMode: { ideal: "environment" } }, audio: false };
     else if (deviceId)
       constraints = { video: { deviceId: { exact: deviceId } }, audio: false };
-    else constraints = { video: true, audio: false };
+    else
+      constraints = { video: { facingMode: "user" }, audio: false };
+
     const stream = await navigator.mediaDevices.getUserMedia(constraints);
     const v = document.getElementById("video");
     v.srcObject = stream;
     currentStream = stream;
-    currentDeviceId = deviceId || currentDeviceId;
+
+    // Detect if it's a back camera
+    const track = stream.getVideoTracks()[0];
+    const settings = track.getSettings();
+    const isBackCamera =
+      settings.facingMode === "environment" ||
+      /back|rear|environment/i.test(track.label);
+
+    // Flip only for front camera
+    v.style.transform = isBackCamera ? "none" : "scaleX(-1)";
+
     v.onloadedmetadata = () => {
       v.play();
-      resizeOverlay();
-      setStatus(`🎥 Camera Active`);
+      matchOverlayToVideo(v);
+      setStatus(`🎥 Camera Active (${isBackCamera ? "Back" : "Front"})`);
     };
   } catch (err) {
     console.error("switchCamera error:", err);
-    alert("Failed to access selected camera.");
+    alert("Failed to access the selected camera.");
   }
 }
 
