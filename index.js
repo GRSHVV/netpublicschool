@@ -320,37 +320,39 @@ function detectParentFace() {
   const btn = document.getElementById("registerBtn");
 
   adminDetectInterval = setInterval(async () => {
-    if (!modelsLoaded || !v.videoWidth) return;
-    const now = Date.now();
-    // If a detection was drawn recently, keep it visible for 3 seconds
-    if (lastDetection && now - lastDrawTime < 3000) return;
+    if (!modelsLoaded || !v.videoWidth || v.readyState < 2) return;
 
-    // Ensure overlay matches video size
-    resizeOverlay();
+    // Match canvas resolution to video
+    o.width = v.videoWidth;
+    o.height = v.videoHeight;
 
     const detection = await faceapi
-      .detectSingleFace(v, new faceapi.TinyFaceDetectorOptions({ scoreThreshold: 0.5 }))
+      .detectSingleFace(
+        v,
+        new faceapi.TinyFaceDetectorOptions({ inputSize: 416, scoreThreshold: 0.35 })
+      )
       .withFaceLandmarks()
       .withFaceDescriptor();
 
-    const displaySize = { width: o.width, height: o.height };
-    faceapi.matchDimensions(o, displaySize);
     ctx.clearRect(0, 0, o.width, o.height);
 
     if (detection) {
-      const resized = faceapi.resizeResults(detection, displaySize);
+      const resized = faceapi.resizeResults(detection, {
+        width: o.width,
+        height: o.height,
+      });
       faceapi.draw.drawDetections(o, resized);
       lastDetection = detection;
-      lastDrawTime = now;
+      lastDrawTime = Date.now();
       if (btn) btn.disabled = !document.getElementById("username").value.trim();
     } else {
-      if (now - lastDrawTime >= 3000) {
+      if (Date.now() - lastDrawTime > 3000) {
         ctx.clearRect(0, 0, o.width, o.height);
         lastDetection = null;
         if (btn) btn.disabled = true;
       }
     }
-  }, 300);
+  }, 250);
 }
 
 /* =====================================================
@@ -546,15 +548,12 @@ async function startRecognition() {
   const users = await window.dbAPI.getAllUsers();
   const links = await window.dbAPI.getAllLinks();
   const children = await window.dbAPI.getAllChildren();
-  if (!users.length) {
-    setStatus("⚠️ No registered parents found.");
-    return;
-  }
+  if (!users.length) return setStatus("⚠️ No registered parents found.");
 
   const labeled = users.map(
     (u) => new faceapi.LabeledFaceDescriptors(u.name, [new Float32Array(u.descriptor)])
   );
-  const matcher = new faceapi.FaceMatcher(labeled, 0.7);
+  const matcher = new faceapi.FaceMatcher(labeled, 0.6);
 
   const v = document.getElementById("video");
   const o = document.getElementById("overlay");
@@ -562,31 +561,29 @@ async function startRecognition() {
   const ctx = o.getContext("2d");
   const resultBox = document.getElementById("recognitionResult");
 
-  let lastResultTime = 0;
-  let lastResult = null;
-
   recognitionInterval = setInterval(async () => {
-    if (!modelsLoaded || !v.videoWidth) return;
-    const now = Date.now();
+    if (!modelsLoaded || !v.videoWidth || v.readyState < 2) return;
 
-    // Keep previous result for 3 seconds
-    if (lastResult && now - lastResultTime < 3000) return;
-
-    // Sync overlay size with video
-    resizeOverlay();
+    // Ensure overlay matches video resolution exactly
+    o.width = v.videoWidth;
+    o.height = v.videoHeight;
 
     const det = await faceapi
-      .detectSingleFace(v, new faceapi.TinyFaceDetectorOptions({ scoreThreshold: 0.4 }))
+      .detectSingleFace(
+        v,
+        new faceapi.TinyFaceDetectorOptions({ inputSize: 416, scoreThreshold: 0.3 })
+      )
       .withFaceLandmarks()
       .withFaceDescriptor();
 
-    const displaySize = { width: o.width, height: o.height };
-    faceapi.matchDimensions(o, displaySize);
     ctx.clearRect(0, 0, o.width, o.height);
     if (resultBox) resultBox.innerHTML = "";
 
     if (det) {
-      const resized = faceapi.resizeResults(det, displaySize);
+      const resized = faceapi.resizeResults(det, {
+        width: o.width,
+        height: o.height,
+      });
       const best = matcher.findBestMatch(det.descriptor);
       const box = resized.detection.box;
 
@@ -597,8 +594,9 @@ async function startRecognition() {
         ctx.fillStyle = "red";
         ctx.font = "16px Arial";
         ctx.fillText("Unrecognized", box.x, box.y - 10);
-        if (resultBox) resultBox.innerHTML = "<p style='color:red; font-weight:600;'>❌ Unrecognized face</p>";
-        lastResult = "unknown";
+        if (resultBox)
+          resultBox.innerHTML =
+            "<p style='color:red;font-weight:600;'>❌ Unrecognized face</p>";
       } else {
         ctx.strokeStyle = "green";
         ctx.lineWidth = 3;
@@ -609,32 +607,25 @@ async function startRecognition() {
 
         const parent = users.find((u) => u.name === best.label);
         const link = links.find((l) => l.parentId === parent?.id);
-
-        if (link && link.childrenIds && link.childrenIds.length > 0) {
-          const kidsHtml = link.childrenIds
-            .map((cid) => {
-              const ch = children.find((c) => c.id === cid);
-              return ch ? `<li>${ch.name} (${ch.class}-${ch.section})</li>` : "";
-            })
-            .join("");
-          if (resultBox) resultBox.innerHTML = `
-            <p style='color:green; font-weight:600;'>✅ Recognized: ${best.label}</p>
-            <p><strong>Linked Children:</strong></p>
-            <ul style="margin-left:10px; list-style: disc;">${kidsHtml}</ul>`;
-        } else {
-          if (resultBox) resultBox.innerHTML = `
-            <p style='color:green; font-weight:600;'>✅ Recognized: ${best.label}</p>
-            <p>No linked children found</p>`;
-        }
-        lastResult = best.label;
+        const kidsHtml = (link?.childrenIds || [])
+          .map((cid) => {
+            const ch = children.find((c) => c.id === cid);
+            return ch
+              ? `<li>${ch.name} (${ch.class}-${ch.section})</li>`
+              : "";
+          })
+          .join("");
+        resultBox.innerHTML = `
+          <p style='color:green;font-weight:600;'>✅ Recognized: ${best.label}</p>
+          ${
+            kidsHtml
+              ? `<p><strong>Linked Children:</strong></p><ul>${kidsHtml}</ul>`
+              : "<p>No linked children found</p>"
+          }
+        `;
       }
-
-      lastResultTime = now;
-    } else {
-      // No face detected — clear status if past persistence window
-      setStatus("No face detected...");
     }
-  }, 400);
+  }, 350);
 }
 
 /* =====================================================
