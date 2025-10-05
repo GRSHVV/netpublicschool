@@ -1,4 +1,4 @@
-// index.js — Smart Pickup System (Final Version with Enlarged Recognition Status)
+// index.js — Smart Pickup System (Final Stable Version All Modules Working)
 // ===========================================================
 
 let currentMode = null;
@@ -11,6 +11,9 @@ let currentDeviceId = null;
 let lastDetection = null;
 let lastDrawTime = 0;
 
+/* =====================================================
+   HELPERS
+===================================================== */
 function setStatus(msg) {
   const el = document.getElementById("statusMsg");
   if (el) el.textContent = msg;
@@ -254,14 +257,93 @@ async function loadParents() {
 }
 
 /* =====================================================
-   RECOGNITION MODE (Larger Font & Highlighted)
+   CLASS & SECTION MANAGEMENT (FIXED)
+===================================================== */
+function renderClass(content) {
+  content.innerHTML = `
+    <h3>Manage Classes & Sections</h3>
+    <label>Add Class</label><input id="className" placeholder="e.g. 10th"/>
+    <button id="addClassBtn">Add</button>
+    <ul id="classList"></ul>
+    <hr/>
+    <label>Add Section</label><input id="sectionName" placeholder="e.g. a"/>
+    <button id="addSectionBtn">Add</button>
+    <ul id="sectionList"></ul>`;
+  safeGet("addClassBtn").onclick = async () => {
+    const name = safeGet("className").value.trim().toLowerCase();
+    if (!name) return;
+    await window.dbAPI.addClass(name);
+    loadClassList();
+  };
+  safeGet("addSectionBtn").onclick = async () => {
+    const name = safeGet("sectionName").value.trim().toLowerCase();
+    if (!name) return;
+    await window.dbAPI.addSection(name);
+    loadSectionList();
+  };
+  loadClassList();
+  loadSectionList();
+}
+async function loadClassList() {
+  const list = safeGet("classList");
+  const classes = await window.dbAPI.getAllClasses();
+  list.innerHTML = classes.length
+    ? classes.map((x) => `<li>${x.name}</li>`).join("")
+    : "<li>No classes.</li>";
+}
+async function loadSectionList() {
+  const list = safeGet("sectionList");
+  const sections = await window.dbAPI.getAllSections();
+  list.innerHTML = sections.length
+    ? sections.map((x) => `<li>${x.name}</li>`).join("")
+    : "<li>No sections.</li>";
+}
+
+/* =====================================================
+   CHILD REGISTRATION (FIXED)
+===================================================== */
+function renderChild(content) {
+  content.innerHTML = `
+    <h3>Register Child</h3>
+    <label>Name</label><input id="childName" placeholder="name"/>
+    <label>Class</label><select id="childClass"></select>
+    <label>Section</label><select id="childSection"></select>
+    <button id="addChildBtn" class="primary">Add Child</button>
+    <ul id="childList"></ul>`;
+  await loadClassSectionOptions("childClass", "childSection");
+  safeGet("addChildBtn").onclick = addChild;
+  loadChildren();
+}
+async function addChild() {
+  const name = safeGet("childName").value.trim().toLowerCase();
+  const cls = safeGet("childClass").value.toLowerCase();
+  const sec = safeGet("childSection").value.toLowerCase();
+  if (!name || !cls || !sec) return alert("Fill all fields.");
+  await window.dbAPI.addChild({ id: Date.now().toString(), name, class: cls, section: sec });
+  safeGet("childName").value = "";
+  loadChildren();
+}
+async function loadChildren() {
+  const kids = await window.dbAPI.getAllChildren();
+  safeGet("childList").innerHTML = kids.length
+    ? kids.map((c) => `<li>${c.name} (${c.class}-${c.section})</li>`).join("")
+    : "<li>No children registered.</li>";
+}
+async function loadClassSectionOptions(cid, sid) {
+  const cs = await window.dbAPI.getAllClasses();
+  const ss = await window.dbAPI.getAllSections();
+  safeGet(cid).innerHTML = cs.map((c) => `<option>${c.name}</option>`).join("");
+  safeGet(sid).innerHTML = ss.map((s) => `<option>${s.name}</option>`).join("");
+}
+
+/* =====================================================
+   RECOGNITION MODE (Enlarged Result)
 ===================================================== */
 function renderRecognition(content) {
   content.innerHTML = `
     <h3>Recognition</h3>
-    <div id="recognitionResult" class="result-box" 
-      style="font-size: 1.3rem; font-weight: 600; padding: 15px; border-radius: 10px;
-      background: #f9fafb; color: #222; min-height: 120px;">
+    <div id="recognitionResult" class="result-box"
+      style="font-size:1.4rem;font-weight:600;padding:15px;border-radius:10px;background:#f9fafb;min-height:150px;">
       Waiting for face...
     </div>`;
   const back = videoDevices.find((d) =>
@@ -270,15 +352,13 @@ function renderRecognition(content) {
   if (back) switchCamera(back.deviceId, true).catch(() => {});
   startRecognition();
 }
-
 async function startRecognition() {
   if (recognitionInterval) clearInterval(recognitionInterval);
   const users = await window.dbAPI.getAllUsers();
   const links = await window.dbAPI.getAllLinks();
   const children = await window.dbAPI.getAllChildren();
   if (!users.length) {
-    setStatus("No registered parents.");
-    safeGet("recognitionResult").innerHTML = "<p>No registered parents</p>";
+    safeGet("recognitionResult").innerHTML = "<p>No registered parents.</p>";
     return;
   }
   const labeled = users.map(
@@ -287,53 +367,36 @@ async function startRecognition() {
   const matcher = new faceapi.FaceMatcher(labeled, 0.6);
   const v = safeGet("video");
   const o = safeGet("overlay");
-  const resultBox = safeGet("recognitionResult");
-
+  const box = safeGet("recognitionResult");
   recognitionInterval = setInterval(async () => {
     if (!modelsLoaded || !v.videoWidth) return;
     const det = await faceapi
       .detectSingleFace(v, new faceapi.TinyFaceDetectorOptions({ inputSize: 416, scoreThreshold: 0.32 }))
       .withFaceLandmarks()
       .withFaceDescriptor();
-
     const ctx = o.getContext("2d");
     ctx.clearRect(0, 0, o.width, o.height);
     if (!det) return;
-
     const best = matcher.findBestMatch(det.descriptor);
-    let color = best.label === "unknown" ? "red" : "lime";
+    const color = best.label === "unknown" ? "red" : "lime";
     drawAlignedDetections(v, o, [det], color);
-
     if (best.label === "unknown") {
-      resultBox.innerHTML = `
-        <div style="background:#fee2e2;padding:15px;border-radius:10px;color:#b91c1c;">
-          <h2>❌ Unrecognized Face</h2>
-          <p>Please check registration.</p>
-        </div>`;
+      box.innerHTML = `<div style="background:#fee2e2;padding:15px;border-radius:10px;color:#b91c1c;">
+        <h2>❌ Unrecognized Face</h2><p>Please check registration.</p></div>`;
       return;
     }
-
     const parent = users.find((u) => u.name === best.label);
     const link = links.find((l) => l.parentId === parent?.id);
-    const kidsHtml = (link?.childrenIds || [])
+    const kids = (link?.childrenIds || [])
       .map((cid) => {
-        const c = children.find((ch) => ch.id === cid);
-        return c
-          ? `<li style="font-size:1.2rem;line-height:1.6;">👧 ${c.name} (${c.class}-${c.section})</li>`
-          : "";
+        const c = children.find((x) => x.id === cid);
+        return c ? `<li style="font-size:1.3rem;">👧 ${c.name} (${c.class}-${c.section})</li>` : "";
       })
       .join("");
-
-    resultBox.innerHTML = `
-      <div style="background:#dcfce7;padding:15px;border-radius:10px;color:#166534;">
-        <h2>✅ Recognized: ${best.label}</h2>
-        ${
-          kidsHtml
-            ? `<h3>Linked Children:</h3><ul style="margin-top:5px;">${kidsHtml}</ul>`
-            : "<p>No linked children found.</p>"
-        }
-      </div>`;
-  }, 350);
+    box.innerHTML = `<div style="background:#dcfce7;padding:15px;border-radius:10px;color:#166534;">
+      <h2>✅ Recognized: ${best.label}</h2>
+      ${kids ? `<h3>Linked Children:</h3><ul>${kids}</ul>` : "<p>No linked children</p>"}</div>`;
+  }, 400);
 }
 
 window.addEventListener("beforeunload", () => {
