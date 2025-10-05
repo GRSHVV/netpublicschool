@@ -2,50 +2,54 @@
 <html lang="en">
 <head>
   <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
   <title>Smart Pickup System</title>
   <link rel="stylesheet" href="style.css" />
   <link rel="icon" href="icon-192.png" type="image/png" />
 
-  <!-- Face API and App Scripts -->
+  <!-- Load face-api.js -->
   <script defer src="face-api.min.js"></script>
+
+  <!-- Load database and main logic -->
   <script defer src="db.js"></script>
   <script defer src="index.js"></script>
 </head>
+
 <body>
   <div class="app-container">
-
-    <!-- ================= Camera Section ================= -->
+    <!-- ================= CAMERA AREA (LEFT PANEL) ================= -->
     <section class="camera-area" id="cameraArea">
       <video id="video" autoplay muted playsinline></video>
       <canvas id="overlay"></canvas>
       <div id="video-status" class="video-status">Initializing camera...</div>
     </section>
 
-    <!-- ================= Menu Panel ================= -->
+    <!-- ================= MENU AREA (RIGHT PANEL) ================= -->
     <aside class="menu-panel">
-      <h2 class="app-title">Smart Pickup System</h2>
+      <h2 class="app-title">🎓 Smart Pickup System</h2>
 
-      <!-- Camera Controls -->
+      <!-- Camera Selection -->
       <div class="camera-controls">
-        <label for="cameraSelect">Camera:</label>
+        <label for="cameraSelect">Select Camera:</label>
         <select id="cameraSelect"></select>
-        <button id="btnStartCamera" onclick="startCamera()">Start</button>
+        <div class="camera-buttons">
+          <button id="btnStartCamera" class="primary small">Start Camera</button>
+          <button id="btnRefreshDevices" class="secondary small">Refresh</button>
+        </div>
       </div>
 
-      <!-- Menu Buttons -->
-      <div class="menu-buttons">
-        <button onclick="switchMode('admin')">👨‍👩‍👧 Register Parent</button>
-        <button onclick="switchMode('child')">🧒 Register Child</button>
-        <button onclick="switchMode('class')">🏫 Manage Classes</button>
-        <button onclick="switchMode('link')">🔗 Link Parent–Child</button>
-        <button onclick="switchMode('recognition')">🎥 Recognition</button>
-      </div>
+      <!-- Navigation Menu -->
+      <nav class="menu-buttons">
+        <button id="btnAdmin">👨‍👩‍👧 Register Parent</button>
+        <button id="btnChild">🧒 Register Child</button>
+        <button id="btnClass">🏫 Manage Classes</button>
+        <button id="btnLink">🔗 Link Parent–Child</button>
+        <button id="btnRecognition">🎥 Recognition</button>
+      </nav>
 
       <!-- Status -->
       <div class="status-box">
-        <strong>Status:</strong>
-        <span id="statusMsg">Initializing...</span>
+        <strong>Status:</strong> <span id="statusMsg">Initializing...</span>
       </div>
 
       <!-- Dynamic Content -->
@@ -55,9 +59,9 @@
     </aside>
   </div>
 
-  <!-- ================= Footer ================= -->
+  <!-- ================= FOOTER ================= -->
   <footer class="footer">
-    <p>© 2025 Smart Pickup System | Powered by face-api.js + IndexedDB | Offline Ready</p>
+    <p>© 2025 Smart Pickup System — Powered by face-api.js + IndexedDB</p>
   </footer>
 </body>
 </html>
