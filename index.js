@@ -148,19 +148,16 @@ async function switchCamera(deviceId, preferBack = false) {
 function matchOverlayToVideo(video) {
   const overlay = safeGet("overlay");
   if (!overlay || !video) return;
-  // Use bounding rect for displayed size, multiply by DPR for crisp drawing
-  const rect = video.getBoundingClientRect();
-  // If video hasn't reported size yet, use offsets as fallback
-  const w = video.videoWidth || rect.width || video.offsetWidth;
-  const h = video.videoHeight || rect.height || video.offsetHeight;
 
-  // overlay dimensions in device pixels
-  overlay.width = w * window.devicePixelRatio;
-  overlay.height = h * window.devicePixelRatio;
-  // overlay size in CSS pixels to match video display
+  const rect = video.getBoundingClientRect();
+  const dpr = window.devicePixelRatio || 1;
+
+  overlay.width = rect.width * dpr;
+  overlay.height = rect.height * dpr;
   overlay.style.width = rect.width + "px";
   overlay.style.height = rect.height + "px";
 }
+
 
 function drawAlignedDetections(video, overlay, detections) {
   if (!video || !overlay) return;
