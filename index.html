@@ -6,6 +6,19 @@
   <title>Smart Pickup System</title>
   <link rel="stylesheet" href="style.css" />
   <link rel="icon" href="icon-192.png" type="image/png" />
+   <script>
+      if ('serviceWorker' in navigator) {
+        window.addEventListener('load', function() {
+          navigator.serviceWorker.register('./service-worker.js')
+          .then(function(reg) {
+          console.log('Service worker registered ✅', reg);
+        })
+        .catch(function(err) {
+        console.error('Service worker registration failed ❌', err);
+        });
+      });
+    }
+  </script>
 
   <!-- Load face-api.js -->
   <script defer src="face-api.min.js"></script>
@@ -13,6 +26,7 @@
   <!-- Load database and main logic -->
   <script defer src="db.js"></script>
   <script defer src="index.js"></script>
+  
 </head>
 
 <body>
@@ -65,3 +79,4 @@
   </footer>
 </body>
 </html>
+
