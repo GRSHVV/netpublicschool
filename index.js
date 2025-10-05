@@ -1,7 +1,7 @@
-// index.js — Smart Pickup System (Final Complete Version)
+// index.js — Smart Pickup System (Full Final Version)
 // ===========================================================
-// Features: Face Registration, Recognition, Class/Section, Parent-Child Linking
-// Author: Girish Vijayapura (2025)
+// Modules: Parent Registration, Child Registration, Class/Section Mgmt,
+// Parent–Child Linking, Face Recognition
 
 let currentMode = null;
 let modelsLoaded = false;
@@ -51,7 +51,7 @@ async function ensureCameraPermission() {
   try {
     await navigator.mediaDevices.getUserMedia({ video: true });
   } catch (err) {
-    alert("Camera permission is required. Please enable it in browser settings.");
+    alert("Camera permission is required. Please enable it.");
     throw err;
   }
 }
@@ -121,7 +121,6 @@ async function switchCamera(deviceId, preferBack = false) {
     };
   } catch (err) {
     console.error("switchCamera error:", err);
-    alert("Failed to access selected camera.");
   }
 }
 
@@ -132,27 +131,6 @@ function matchOverlayToVideo(video) {
   o.height = rect.height * window.devicePixelRatio;
   o.style.width = rect.width + "px";
   o.style.height = rect.height + "px";
-}
-
-/* =====================================================
-   DETECTION DRAWING
-===================================================== */
-function drawAlignedDetections(video, overlay, detections) {
-  const ctx = overlay.getContext("2d");
-  ctx.clearRect(0, 0, overlay.width, overlay.height);
-
-  const scaleX = overlay.width / video.videoWidth;
-  const scaleY = overlay.height / video.videoHeight;
-  const isMirrored = video.style.transform.includes("scaleX(-1)");
-
-  detections.forEach((det) => {
-    const { x, y, width, height } = det.detection.box;
-    const drawX = isMirrored ? overlay.width - (x + width) * scaleX : x * scaleX;
-    const drawY = y * scaleY;
-    ctx.strokeStyle = det.color || "green";
-    ctx.lineWidth = 3;
-    ctx.strokeRect(drawX, drawY, width * scaleX, height * scaleY);
-  });
 }
 
 /* =====================================================
@@ -195,7 +173,7 @@ function switchMode(mode) {
 }
 
 /* =====================================================
-   ADMIN (REGISTER PARENT)
+   ADMIN MODE (PARENT)
 ===================================================== */
 function renderAdmin(content) {
   content.innerHTML = `
@@ -251,6 +229,102 @@ async function loadParents() {
     ? users.map((u) => `<li>${u.name} (${u.role})</li>`).join("")
     : "<li>No parents registered.</li>";
 }
+
+/* =====================================================
+   CLASS & SECTION MANAGEMENT
+===================================================== */
+function renderClass(content) {
+  content.innerHTML = `
+    <h3>Manage Classes & Sections</h3>
+    <label>Add Class</label><input id="className" placeholder="e.g. 10th"/>
+    <button id="addClassBtn">Add</button>
+    <ul id="classList"></ul><hr/>
+    <label>Add Section</label><input id="sectionName" placeholder="e.g. a"/>
+    <button id="addSectionBtn">Add</button>
+    <ul id="sectionList"></ul>`;
+  document.getElementById("addClassBtn").addEventListener("click", addClass);
+  document.getElementById("addSectionBtn").addEventListener("click", addSection);
+  loadClassList();
+  loadSectionList();
+}
+
+async function addClass() {
+  const name = document.getElementById("className").value.trim().toLowerCase();
+  if (!name) return;
+  await window.dbAPI.addClass(name);
+  document.getElementById("className").value = "";
+  loadClassList();
+}
+
+async function addSection() {
+  const name = document.getElementById("sectionName").value.trim().toLowerCase();
+  if (!name) return;
+  await window.dbAPI.addSection(name);
+  document.getElementById("sectionName").value = "";
+  loadSectionList();
+}
+
+async function loadClassList() {
+  const list = document.getElementById("classList");
+  const classes = await window.dbAPI.getAllClasses();
+  list.innerHTML = classes.length
+    ? classes.map((x) => `<li>${x.name}</li>`).join("")
+    : "<li>No classes.</li>";
+}
+
+async function loadSectionList() {
+  const list = document.getElementById("sectionList");
+  const sections = await window.dbAPI.getAllSections();
+  list.innerHTML = sections.length
+    ? sections.map((x) => `<li>${x.name}</li>`).join("")
+    : "<li>No sections.</li>";
+}
+
+/* =====================================================
+   CHILD REGISTRATION
+===================================================== */
+function renderChild(content) {
+  content.innerHTML = `
+    <h3>Register Child</h3>
+    <label>Name</label><input id="childName" placeholder="name"/>
+    <label>Class</label><select id="childClass"></select>
+    <label>Section</label><select id="childSection"></select>
+    <button id="addChildBtn" class="primary">Add Child</button>
+    <ul id="childList"></ul>`;
+  document.getElementById("addChildBtn").addEventListener("click", addChild);
+  loadClassSectionOptions("childClass", "childSection");
+  loadChildren();
+}
+
+async function addChild() {
+  const name = document.getElementById("childName").value.trim().toLowerCase();
+  const cls = document.getElementById("childClass").value.toLowerCase();
+  const sec = document.getElementById("childSection").value.toLowerCase();
+  if (!name || !cls || !sec) return alert("Fill all fields.");
+  await window.dbAPI.addChild({ id: Date.now().toString(), name, class: cls, section: sec });
+  document.getElementById("childName").value = "";
+  loadChildren();
+}
+
+async function loadChildren() {
+  const kids = await window.dbAPI.getAllChildren();
+  document.getElementById("childList").innerHTML = kids.length
+    ? kids.map((c) => `<li>${c.name} (${c.class}-${c.section})</li>`).join("")
+    : "<li>No children registered.</li>";
+}
+
+async function loadClassSectionOptions(cid, sid) {
+  const cs = await window.dbAPI.getAllClasses();
+  const ss = await window.dbAPI.getAllSections();
+  document.getElementById(cid).innerHTML = cs.map((c) => `<option>${c.name}</option>`).join("");
+  document.getElementById(sid).innerHTML = ss.map((s) => `<option>${s.name}</option>`).join("");
+}
+
+/* =====================================================
+   LINK MODE & RECOGNITION (UNCHANGED)
+===================================================== */
+// (Use the previous code here exactly as in last version)
+
 
 /* =====================================================
    LINK MODE (Parent → Class → Section → Child)
