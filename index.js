@@ -334,7 +334,7 @@ async function loadChildren() {
     : "<li>No children registered.</li>";
 }
 
-// === STATS COUNTER UPDATES ===
+// === STATS COUNTER ===
 async function updateStats() {
   const parents = await window.dbAPI.getAllUsers();
   const children = await window.dbAPI.getAllChildren();
@@ -342,15 +342,19 @@ async function updateStats() {
   safeGet("childCount").textContent = children.length;
 }
 
+// Add refresh button listener
+document.addEventListener("DOMContentLoaded", () => {
+  const refreshBtn = safeGet("refreshStatsBtn");
+  if (refreshBtn) {
+    refreshBtn.addEventListener("click", async () => {
+      refreshBtn.style.transform = "rotate(360deg)";
+      await updateStats();
+      setTimeout(() => (refreshBtn.style.transform = "rotate(0deg)"), 400);
+    });
+  }
+  updateStats();
+});
 
-// Run on load and whenever switching modes
-document.addEventListener("DOMContentLoaded", updateStats);
-async function loadClassSectionOptions(cid, sid) {
-  const cs = await window.dbAPI.getAllClasses();
-  const ss = await window.dbAPI.getAllSections();
-  safeGet(cid).innerHTML = cs.map((c) => `<option>${c.name}</option>`).join("");
-  safeGet(sid).innerHTML = ss.map((s) => `<option>${s.name}</option>`).join("");
-}
 
 /* =====================================================
    LINK PARENT–CHILD MODULE (FIXED)

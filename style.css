@@ -20,10 +20,7 @@ html, body {
   overflow: hidden;
 }
 
-h3 {
-  color: var(--primary-color);
-  margin-bottom: 0.4rem;
-}
+h3 { color: var(--primary-color); margin-bottom: 0.4rem; }
 
 button {
   background: var(--primary-color);
@@ -62,7 +59,7 @@ li {
   box-shadow: 0 1px 2px rgba(0,0,0,0.1);
 }
 
-/* === MAIN LAYOUT === */
+/* === LAYOUT === */
 #appContainer {
   display: flex;
   flex-direction: row;
@@ -101,23 +98,43 @@ li {
   color: white;
 }
 
-/* === STATS + CAMERA SELECTOR === */
-#statsContainer {
-  margin-top: auto;
-  background: rgba(255, 255, 255, 0.1);
-  padding: 10px;
+/* === STATS AREA BELOW MENU === */
+#menuStatsArea {
+  margin-top: 15px;
+  background: rgba(255, 255, 255, 0.12);
+  padding: 12px;
   border-radius: var(--border-radius);
 }
 
-#statsBox {
-  text-align: left;
+#statsHeader {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
   color: #fff;
   font-size: 0.95rem;
-  margin-bottom: 8px;
+  position: relative;
 }
 
-#statsBox p {
-  margin: 2px 0;
+#statsHeader div {
+  margin: 3px 0;
+}
+
+#refreshStatsBtn {
+  position: absolute;
+  right: 0;
+  top: 0;
+  background: transparent;
+  border: none;
+  font-size: 1.2rem;
+  cursor: pointer;
+  color: #fff;
+  transition: transform 0.4s ease;
+}
+
+#refreshStatsBtn:hover { transform: rotate(180deg); }
+
+#cameraSelectorContainer {
+  margin-top: 10px;
 }
 
 #cameraSelectorContainer label {
@@ -206,8 +223,10 @@ li {
     justify-content: space-around;
     align-items: flex-start;
     padding: 10px;
+    overflow-x: auto;
   }
   #menuPanel button { flex: 1; margin: 0 5px; font-size: 0.9rem; }
+  #menuStatsArea { flex: 0 0 auto; width: 40%; }
   #topPanel { flex-direction: column; }
   #cameraArea { flex: 0 0 40%; height: 40vh; }
   #modeContent { flex: 1; }
