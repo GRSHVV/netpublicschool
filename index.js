@@ -124,11 +124,17 @@ function stopCamera() {
 /* ============================================================
    Face Detection & Recognition (3 Colors)
    ============================================================ */
+/* ============================================================
+   Face Detection & Recognition (with Relation & Multi-Pickup)
+   ============================================================ */
 async function startDetectionLoop() {
   if (!modelsLoaded) return;
   clearInterval(detectionLoop);
 
-  const options = new faceapi.TinyFaceDetectorOptions({ inputSize: 224, scoreThreshold: 0.4 });
+  const options = new faceapi.TinyFaceDetectorOptions({
+    inputSize: 224,
+    scoreThreshold: 0.4,
+  });
 
   detectionLoop = setInterval(async () => {
     try {
@@ -151,6 +157,7 @@ async function startDetectionLoop() {
       }
 
       lastDetection = detection;
+
       const box = detection.detection.box;
       const scaleX = overlay.width / video.videoWidth;
       const scaleY = overlay.height / video.videoHeight;
@@ -183,7 +190,7 @@ async function startDetectionLoop() {
           return;
         }
 
-        // Recognized
+        // Recognized parent
         const users = await window.dbAPI.getAllUsers();
         const parent = users.find((u) => u.name === best.label);
         if (!parent) return;
@@ -199,47 +206,94 @@ async function startDetectionLoop() {
         if (linked.length > 0) {
           ctx.strokeStyle = "lime";
           playBeep(100, 1000, "square");
+
+          // Child selection list
           const kidsHtml = linked
-            .map((c) => `<li>${c.name} (${c.class}-${c.section})</li>`)
+            .map(
+              (c) => `
+                <label style="display:block;margin:3px 0;">
+                  <input type="checkbox" class="pickupChild" value="${c.id}">
+                  ${c.name} (${c.class}-${c.section})
+                </label>`
+            )
             .join("");
+
           resultDiv.innerHTML = `
             <p style="color:#22c55e;font-weight:bold;">✅ Recognized: ${best.label}</p>
+            <p style="margin-top:-5px;">Relation: <strong>${parent.role}</strong></p>
             <p>Linked Children:</p>
-            <ul>${kidsHtml}</ul>
-            <button id="auditBtn">Mark Pickup</button>
+            <div style="max-height:120px;overflow-y:auto;border:1px solid #ddd;padding:4px;border-radius:6px;">
+              ${kidsHtml}
+            </div>
+            <button id="auditBtn" style="margin-top:6px;">Mark Pickup</button>
+            <div id="recentAudits" style="margin-top:10px;font-size:0.9rem;"></div>
           `;
+
+          // Handle pickup button
+          $("auditBtn").onclick = async () => {
+            const selected = Array.from(document.querySelectorAll(".pickupChild:checked")).map(
+              (el) => el.value
+            );
+            if (selected.length === 0) return alert("Select at least one child to mark pickup.");
+
+            const now = new Date();
+            const formatted = now.toLocaleString();
+
+            for (const chId of selected) {
+              const child = linked.find((c) => c.id === chId);
+              await window.dbAPI.addAudit({
+                id: Date.now().toString() + Math.random(),
+                parentName: parent.name,
+                relation: parent.role,
+                childName: child.name,
+                class: child.class,
+                section: child.section,
+                pickupTime: formatted,
+              });
+            }
+
+            alert(`✅ Pickup marked for ${selected.length} child(ren).`);
+            showRecentAudits();
+          };
+
+          showRecentAudits(); // show existing records
         } else {
+          // Recognized but no children
           ctx.strokeStyle = "yellow";
           playBeep(200, 800, "triangle");
           resultDiv.innerHTML = `
             <p style="color:#eab308;font-weight:bold;">⚠️ Recognized: ${best.label}</p>
+            <p>Relation: <strong>${parent.role}</strong></p>
             <p>No linked children found.</p>
           `;
         }
 
         ctx.lineWidth = 3;
         ctx.strokeRect(drawBox.x, drawBox.y, drawBox.width, drawBox.height);
-
-        const auditBtn = $("auditBtn");
-        if (auditBtn && linked.length > 0) {
-          auditBtn.onclick = async () => {
-            for (const ch of linked) {
-              await window.dbAPI.addAudit({
-                id: Date.now().toString(),
-                parentId: parent.id,
-                childId: ch.id,
-                timestamp: Date.now(),
-              });
-            }
-            alert("✅ Pickup logged!");
-          };
-        }
       }
     } catch (err) {
       console.error("Detection loop error:", err);
     }
   }, 600);
 }
+
+/* ============================================================
+   Recent Audit Viewer
+   ============================================================ */
+async function showRecentAudits() {
+  const recent = await window.dbAPI.getAllAudits();
+  const sorted = recent.sort((a, b) => b.timestamp - a.timestamp).slice(0, 10);
+
+  const html = sorted
+    .map(
+      (r) =>
+        `<div>🕒 ${r.pickupTime} - ${r.parentName} (${r.relation}) picked up ${r.childName} [${r.class}-${r.section}]</div>`
+    )
+    .join("");
+
+  if ($("recentAudits")) $("recentAudits").innerHTML = html || "<em>No pickup records yet.</em>";
+}
+
 
 /* ============================================================
    Database-Linked Logic
