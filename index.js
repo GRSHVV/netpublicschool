@@ -85,18 +85,19 @@ function setupMenu() {
    ============================================================ */
 async function startCamera(deviceId = null) {
   try {
-    // Stop any existing streams
+    // Stop any previous stream
     if (video && video.srcObject) {
-      video.srcObject.getTracks().forEach((track) => track.stop());
+      video.srcObject.getTracks().forEach((t) => t.stop());
       video.srcObject = null;
     }
 
+    // Enumerate devices
     const devices = await navigator.mediaDevices.enumerateDevices();
     const videoDevices = devices.filter((d) => d.kind === "videoinput");
 
     if (videoDevices.length === 0) {
-      safeGet("statusMsg").textContent = "❌ No camera detected.";
-      alert("No camera detected!");
+      safeGet("statusMsg").textContent = "❌ No camera found.";
+      alert("No camera found on this device!");
       return;
     }
 
@@ -111,45 +112,70 @@ async function startCamera(deviceId = null) {
       });
 
       select.value = deviceId || videoDevices[0].deviceId;
+
       select.onchange = async () => {
         const chosen = select.value;
+        console.log("🔁 Switching camera:", chosen);
         safeGet("statusMsg").textContent = "Switching camera...";
         await startCamera(chosen);
       };
     }
 
-    const chosenId = deviceId || videoDevices[0].deviceId;
-    const stream = await navigator.mediaDevices.getUserMedia({
-      video: { deviceId: { exact: chosenId } },
-      audio: false,
-    });
+    // Determine proper constraints
+    let constraints;
+    if (deviceId) {
+      // Mobile browsers sometimes reject { exact: deviceId }
+      constraints = {
+        video: {
+          deviceId: { ideal: deviceId },
+          facingMode: "environment",
+        },
+      };
+    } else {
+      // Try back camera first on tablets/mobiles
+      constraints = {
+        video: {
+          facingMode: { ideal: "environment" },
+          width: { ideal: 1280 },
+          height: { ideal: 720 },
+        },
+      };
+    }
+
+    console.log("🎥 Starting camera with constraints:", constraints);
+
+    const stream = await navigator.mediaDevices.getUserMedia(constraints);
 
     video.srcObject = stream;
     await video.play();
-    safeGet("statusMsg").textContent = "📷 Camera active.";
-    console.log("✅ Camera started successfully:", chosenId);
 
-    // ✅ Start face detection if models loaded
+    safeGet("statusMsg").textContent = "📷 Camera active.";
+    console.log("✅ Camera started successfully");
+
+    // Fix overlay sizing on mobile/tablet
+    overlay.width = video.videoWidth;
+    overlay.height = video.videoHeight;
+
     if (modelsLoaded) detectFaces();
   } catch (err) {
     console.error("🚫 Camera error:", err);
-    let msg = "Camera access error.";
+
+    let msg = "Camera error.";
     if (err.name === "NotAllowedError") {
-      msg =
-        "Camera permission denied. Please allow camera access in browser settings.";
+      msg = "Camera permission denied. Please allow camera access.";
     } else if (err.name === "NotFoundError") {
-      msg = "No camera found. Please connect or enable your webcam.";
+      msg = "No camera detected on this device.";
     } else if (err.name === "NotReadableError") {
-      msg =
-        "Camera is in use by another app. Close other apps using the camera and retry.";
+      msg = "Camera is busy. Close other apps using the camera.";
     } else if (err.name === "OverconstrainedError") {
-      msg = "Selected camera not available. Switching to default...";
+      msg = "Camera not available. Retrying...";
       safeGet("statusMsg").textContent = msg;
-      await startCamera();
+      setTimeout(() => startCamera(), 1500);
       return;
     }
-    alert(msg);
+
     safeGet("statusMsg").textContent = msg;
+    alert(msg);
   }
 }
 
