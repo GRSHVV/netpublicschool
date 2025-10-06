@@ -305,7 +305,7 @@ async function startDetectionLoop() {
    Recent Audit Viewer
    ============================================================ */
 async function showRecentAudits() {
-  const recent = await window.dbAPI.getAllAudits();
+  const recent = await window.dbAPI.getLastAudits();
   const sorted = recent.sort((a, b) => b.timestamp - a.timestamp).slice(0, 10);
 
   const html = sorted
@@ -598,3 +598,4 @@ document.addEventListener("DOMContentLoaded", async () => {
   toggleCameraVisibility(false); // hidden by default
   setStatus("✅ App Ready");
 });
+
