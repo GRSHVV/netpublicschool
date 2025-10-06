@@ -476,7 +476,7 @@ async function startRecognition() {
   recognitionInterval = setInterval(async () => {
     if (!modelsLoaded || !v.videoWidth) return;
     const det = await faceapi
-      .detectSingleFace(v, new faceapi.TinyFaceDetectorOptions({ inputSize: 512, scoreThreshold: 0.60 }))
+      .detectSingleFace(v, new faceapi.TinyFaceDetectorOptions({ inputSize: 416, scoreThreshold: 0.49 }))
       .withFaceLandmarks()
       .withFaceDescriptor();
     const ctx = o.getContext("2d");
@@ -509,5 +509,4 @@ window.addEventListener("beforeunload", () => {
   if (adminDetectInterval) clearInterval(adminDetectInterval);
   if (recognitionInterval) clearInterval(recognitionInterval);
 });
-
 

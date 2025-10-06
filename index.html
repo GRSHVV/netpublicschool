@@ -1,86 +1,63 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Smart Pickup System</title>
   <link rel="stylesheet" href="style.css" />
-  <link rel="icon" href="icon-192.png" type="image/png" />
   <link rel="manifest" href="./manifest.json" />
   <meta name="theme-color" content="#166534" />
-
-   <script>
-      if ('serviceWorker' in navigator) {
-        window.addEventListener('load', function() {
-          navigator.serviceWorker.register('./service-worker.js')
-          .then(function(reg) {
-          console.log('Service worker registered ✅', reg);
-        })
-        .catch(function(err) {
-        console.error('Service worker registration failed ❌', err);
-        });
-      });
-    }
-  </script>
-
-  <!-- Load face-api.js -->
-  <script defer src="face-api.min.js"></script>
-
-  <!-- Load database and main logic -->
-  <script defer src="db.js"></script>
-  <script defer src="index.js"></script>
-  
+  <script defer src="./face-api.min.js"></script>
+  <script defer src="./db.js"></script>
+  <script defer src="./index.js"></script>
 </head>
-
 <body>
-  <div class="app-container">
-    <!-- ================= CAMERA AREA (LEFT PANEL) ================= -->
-    <section class="camera-area" id="cameraArea">
-      <video id="video" autoplay muted playsinline></video>
-      <canvas id="overlay"></canvas>
-      <div id="video-status" class="video-status">Initializing camera...</div>
-    </section>
+  <div id="appContainer">
+    <!-- MENU PANEL -->
+    <div id="menuPanel">
+      <h2>Menu</h2>
+      <button id="btnAdmin">Register Parent</button>
+      <button id="btnChild">Register Child</button>
+      <button id="btnClass">Manage Classes</button>
+      <button id="btnLink">Link Parent & Child</button>
+      <button id="btnRecognition">Recognition</button>
+    </div>
 
-    <!-- ================= MENU AREA (RIGHT PANEL) ================= -->
-    <aside class="menu-panel">
-      <h2 class="app-title">🎓 Smart Pickup System</h2>
-
-      <!-- Camera Selection -->
-      <div class="camera-controls">
-        <label for="cameraSelect">Select Camera:</label>
-        <select id="cameraSelect"></select>
-        <div class="camera-buttons">
-          <button id="btnStartCamera" class="primary small">Start Camera</button>
-          <button id="btnRefreshDevices" class="secondary small">Refresh</button>
+    <!-- MAIN PANEL -->
+    <div id="mainPanel">
+      <!-- TOP: Camera + Form -->
+      <div id="topPanel">
+        <div id="cameraArea">
+          <video id="video" autoplay muted playsinline></video>
+          <canvas id="overlay"></canvas>
+          <select id="cameraSelect"></select>
+        </div>
+        <div id="modeContent">
+          <!-- Dynamic content loads here -->
         </div>
       </div>
 
-      <!-- Navigation Menu -->
-      <nav class="menu-buttons">
-        <button id="btnAdmin">👨‍👩‍👧 Register Parent</button>
-        <button id="btnChild">🧒 Register Child</button>
-        <button id="btnClass">🏫 Manage Classes</button>
-        <button id="btnLink">🔗 Link Parent–Child</button>
-        <button id="btnRecognition">🎥 Recognition</button>
-      </nav>
-
-      <!-- Status -->
-      <div class="status-box">
-        <strong>Status:</strong> <span id="statusMsg">Initializing...</span>
+      <!-- BOTTOM: Audit/Status -->
+      <div id="bottomPanel">
+        <div id="statusMsg">Initializing...</div>
+        <div id="recognitionResult" class="result-box"></div>
       </div>
-
-      <!-- Dynamic Content -->
-      <div id="modeContent" class="mode-content">
-        <p>Select a mode to begin.</p>
-      </div>
-    </aside>
+    </div>
   </div>
 
-  <!-- ================= FOOTER ================= -->
-  <footer class="footer">
-    <p>© 2025 Smart Pickup System — Powered by face-api.js + IndexedDB</p>
-  </footer>
+  <!-- PWA Service Worker -->
+  <script>
+  if ('serviceWorker' in navigator) {
+    window.addEventListener('load', function() {
+      navigator.serviceWorker.register('./service-worker.js')
+        .then(function(reg) {
+          console.log('✅ Service worker registered:', reg);
+        })
+        .catch(function(err) {
+          console.error('❌ SW registration failed:', err);
+        });
+    });
+  }
+  </script>
 </body>
 </html>
-
-

@@ -6,6 +6,7 @@ const urlsToCache = [
   "./style.css",
   "./db.js",
   "./manifest.json",
+  "./face-api.min.js",
   "./models/tiny_face_detector_model-weights_manifest.json",
   "./models/face_landmark_68_model-weights_manifest.json",
   "./models/face_recognition_model-weights_manifest.json"
