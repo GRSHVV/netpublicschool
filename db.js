@@ -230,6 +230,7 @@ async function getLastAudits(limit = 10) {
    ============================================================ */
 
 window.dbAPI = {
+  openDB,
   addUser,
   getAllUsers,
   addChild,
