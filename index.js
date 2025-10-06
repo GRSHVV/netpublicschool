@@ -5,6 +5,7 @@
 let video, overlay, ctx;
 let currentMode = "none";
 let lastDetection = null;
+let modelsLoaded = false;
 
 /* ============================================================
    Utility Helpers
@@ -22,16 +23,42 @@ document.addEventListener("DOMContentLoaded", async () => {
   overlay = safeGet("overlay");
   ctx = overlay.getContext("2d");
 
-  // Ensure IndexedDB initialized
-  if (window.dbAPI && window.dbAPI.openDB) {
+  // Ensure DB ready
+  if (window.dbAPI && typeof window.dbAPI.openDB === "function") {
     await window.dbAPI.openDB();
   }
 
   setupMenu();
   await updateStats();
-
+  await loadFaceModels(); // ✅ load models before any camera use
   safeGet("statusMsg").textContent = "Ready.";
 });
+
+/* ============================================================
+   Load Face API Models
+   ============================================================ */
+async function loadFaceModels() {
+  try {
+    safeGet("statusMsg").textContent = "⏳ Loading AI face models...";
+    console.log("🧠 Loading face-api models...");
+
+    // Load from relative ./models path
+    await Promise.all([
+      faceapi.nets.tinyFaceDetector.loadFromUri("./models"),
+      faceapi.nets.faceLandmark68Net.loadFromUri("./models"),
+      faceapi.nets.faceRecognitionNet.loadFromUri("./models"),
+    ]);
+
+    modelsLoaded = true;
+    console.log("✅ All models loaded successfully");
+    safeGet("statusMsg").textContent = "✅ Models loaded. Ready for face detection.";
+  } catch (err) {
+    console.error("❌ Error loading models:", err);
+    alert(
+      "Failed to load AI models. Ensure your ./models folder is present and accessible."
+    );
+  }
+}
 
 /* ============================================================
    Menu Setup
@@ -54,55 +81,105 @@ function setupMenu() {
 }
 
 /* ============================================================
-   Face Detection & Camera Helpers
+   Camera Initialization (Secure + Retry + Switch Support)
    ============================================================ */
-async function startCamera(deviceId) {
+async function startCamera(deviceId = null) {
   try {
+    // Stop any existing streams
+    if (video && video.srcObject) {
+      video.srcObject.getTracks().forEach((track) => track.stop());
+      video.srcObject = null;
+    }
+
     const devices = await navigator.mediaDevices.enumerateDevices();
     const videoDevices = devices.filter((d) => d.kind === "videoinput");
 
-    const select = safeGet("cameraSelect");
-    if (select) {
-      select.innerHTML = "";
-      videoDevices.forEach((d) => {
-        const opt = document.createElement("option");
-        opt.value = d.deviceId;
-        opt.textContent = d.label || `Camera ${select.length + 1}`;
-        select.appendChild(opt);
-      });
-
-      select.onchange = async () => {
-        const chosen = select.value;
-        console.log("🔁 Switching to:", chosen);
-        await startCamera(chosen);
-      };
-    }
-
     if (videoDevices.length === 0) {
+      safeGet("statusMsg").textContent = "❌ No camera detected.";
       alert("No camera detected!");
       return;
     }
 
-    const chosenId = deviceId || videoDevices[0].deviceId;
+    const select = safeGet("cameraSelect");
+    if (select) {
+      select.innerHTML = "";
+      videoDevices.forEach((d, i) => {
+        const opt = document.createElement("option");
+        opt.value = d.deviceId;
+        opt.textContent = d.label || `Camera ${i + 1}`;
+        select.appendChild(opt);
+      });
 
+      select.value = deviceId || videoDevices[0].deviceId;
+      select.onchange = async () => {
+        const chosen = select.value;
+        safeGet("statusMsg").textContent = "Switching camera...";
+        await startCamera(chosen);
+      };
+    }
+
+    const chosenId = deviceId || videoDevices[0].deviceId;
     const stream = await navigator.mediaDevices.getUserMedia({
       video: { deviceId: { exact: chosenId } },
+      audio: false,
     });
-
-    if (video.srcObject) {
-      const tracks = video.srcObject.getTracks();
-      tracks.forEach((t) => t.stop());
-    }
 
     video.srcObject = stream;
     await video.play();
-    console.log("📷 Camera started:", chosenId);
+    safeGet("statusMsg").textContent = "📷 Camera active.";
+    console.log("✅ Camera started successfully:", chosenId);
+
+    // ✅ Start face detection if models loaded
+    if (modelsLoaded) detectFaces();
   } catch (err) {
     console.error("🚫 Camera error:", err);
-    alert(
-      "Camera access denied or not available. Please check browser permissions and HTTPS setup."
-    );
+    let msg = "Camera access error.";
+    if (err.name === "NotAllowedError") {
+      msg =
+        "Camera permission denied. Please allow camera access in browser settings.";
+    } else if (err.name === "NotFoundError") {
+      msg = "No camera found. Please connect or enable your webcam.";
+    } else if (err.name === "NotReadableError") {
+      msg =
+        "Camera is in use by another app. Close other apps using the camera and retry.";
+    } else if (err.name === "OverconstrainedError") {
+      msg = "Selected camera not available. Switching to default...";
+      safeGet("statusMsg").textContent = msg;
+      await startCamera();
+      return;
+    }
+    alert(msg);
+    safeGet("statusMsg").textContent = msg;
   }
+}
+
+/* ============================================================
+   Face Detection Loop
+   ============================================================ */
+async function detectFaces() {
+  const options = new faceapi.TinyFaceDetectorOptions({ inputSize: 224 });
+  setInterval(async () => {
+    if (!modelsLoaded || !video || video.readyState !== 4) return;
+    const detections = await faceapi
+      .detectAllFaces(video, options)
+      .withFaceLandmarks()
+      .withFaceDescriptors();
+
+    ctx.clearRect(0, 0, overlay.width, overlay.height);
+    const resized = faceapi.resizeResults(detections, {
+      width: overlay.width,
+      height: overlay.height,
+    });
+    faceapi.draw.drawDetections(overlay, resized);
+    faceapi.draw.drawFaceLandmarks(overlay, resized);
+
+    if (detections.length > 0) {
+      lastDetection = detections[0];
+      safeGet("registerBtn")?.removeAttribute("disabled");
+    } else {
+      safeGet("registerBtn")?.setAttribute("disabled", "true");
+    }
+  }, 500);
 }
 
 /* ============================================================
@@ -124,29 +201,8 @@ async function loadRegisterParent() {
     <p style="font-size:0.9rem;color:gray;">Face must be detected before enabling Register button.</p>
   `;
 
-  safeGet("statusMsg").textContent = "Camera ready for face detection...";
+  safeGet("statusMsg").textContent = "Camera ready for registration...";
   await startCamera();
-
-  const registerBtn = safeGet("registerBtn");
-
-  // Simulated detection readiness
-  registerBtn.disabled = false;
-  registerBtn.onclick = async () => {
-    const name = safeGet("username").value.trim().toLowerCase();
-    const role = safeGet("role").value.toLowerCase();
-    if (!name) return alert("Please enter parent name.");
-
-    // Simulated face descriptor
-    const desc = Array(128).fill(Math.random());
-    await window.dbAPI.addUser({
-      id: Date.now().toString(),
-      name,
-      role,
-      descriptor: desc,
-    });
-    alert("✅ Parent registered successfully!");
-    await updateStats();
-  };
 }
 
 /* ============================================================
@@ -177,7 +233,6 @@ async function loadRegisterChild() {
     const cls = safeGet("childClass").value.toLowerCase();
     const sec = safeGet("childSection").value.toLowerCase();
     if (!name || !cls || !sec) return alert("Please fill all details.");
-
     await window.dbAPI.addChild({
       id: Date.now().toString(),
       name,
@@ -206,7 +261,6 @@ async function loadClassManager() {
         <h4>Existing Classes</h4>
         <ul id="classList"></ul>
       </div>
-
       <div style="flex:1;min-width:250px;">
         <h4>Add Section</h4>
         <label>Section Name:</label>
@@ -255,22 +309,6 @@ async function refreshClassSectionLists() {
     .join("");
 }
 
-async function deleteClass(id) {
-  if (!confirm("Are you sure you want to delete this class?")) return;
-  const db = await window.dbAPI.openDB();
-  const tx = db.transaction("classes", "readwrite");
-  tx.objectStore("classes").delete(id);
-  tx.oncomplete = refreshClassSectionLists;
-}
-
-async function deleteSection(id) {
-  if (!confirm("Are you sure you want to delete this section?")) return;
-  const db = await window.dbAPI.openDB();
-  const tx = db.transaction("sections", "readwrite");
-  tx.objectStore("sections").delete(id);
-  tx.oncomplete = refreshClassSectionLists;
-}
-
 /* ============================================================
    Mode: Link Parent and Child
    ============================================================ */
@@ -288,7 +326,9 @@ async function loadLinkParentChild() {
 
     <label>Select Child:</label>
     <select id="childSelect" multiple size="5">
-      ${children.map((c) => `<option value="${c.id}">${c.name} (${c.class}-${c.section})</option>`).join("")}
+      ${children
+        .map((c) => `<option value="${c.id}">${c.name} (${c.class}-${c.section})</option>`)
+        .join("")}
     </select>
 
     <button id="linkBtn">Link Selected</button>
@@ -301,7 +341,6 @@ async function loadLinkParentChild() {
     );
     if (!parentId || selectedChildren.length === 0)
       return alert("Select one parent and at least one child.");
-
     for (const childId of selectedChildren) {
       await window.dbAPI.addLink({
         id: Date.now().toString() + Math.random(),
@@ -320,14 +359,14 @@ async function loadRecognitionMode() {
   currentMode = "recognition";
   safeGet("modeContent").innerHTML = `
     <h3>Recognition Mode</h3>
-    <p>Show face to camera to identify registered parent.</p>
+    <p>Show your face to the camera to identify registered parent.</p>
     <div id="recognitionStatus">Waiting for camera...</div>
   `;
   await startCamera();
 }
 
 /* ============================================================
-   STATS COUNTER (Parents / Children)
+   STATS COUNTER
    ============================================================ */
 async function updateStats() {
   const parents = await window.dbAPI.getAllUsers();
