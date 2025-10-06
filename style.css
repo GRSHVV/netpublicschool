@@ -52,17 +52,8 @@ input, select {
   box-sizing: border-box;
 }
 
-label {
-  font-weight: 600;
-  display: block;
-  margin-bottom: 3px;
-}
-
-ul {
-  list-style: none;
-  padding: 0;
-}
-
+label { font-weight: 600; display: block; margin-bottom: 3px; }
+ul { list-style: none; padding: 0; }
 li {
   background: white;
   margin: 4px 0;
@@ -110,12 +101,23 @@ li {
   color: white;
 }
 
-/* Camera selector (moved to menu bottom) */
-#cameraSelectorContainer {
+/* === STATS + CAMERA SELECTOR === */
+#statsContainer {
   margin-top: auto;
   background: rgba(255, 255, 255, 0.1);
   padding: 10px;
   border-radius: var(--border-radius);
+}
+
+#statsBox {
+  text-align: left;
+  color: #fff;
+  font-size: 0.95rem;
+  margin-bottom: 8px;
+}
+
+#statsBox p {
+  margin: 2px 0;
 }
 
 #cameraSelectorContainer label {
@@ -131,7 +133,7 @@ li {
   font-size: 1rem;
 }
 
-/* === MAIN CONTENT AREA === */
+/* === MAIN PANEL === */
 #mainPanel {
   flex: 1;
   display: flex;
@@ -184,11 +186,9 @@ li {
   height: 100%;
 }
 
-.camera-hidden {
-  display: none !important;
-}
+.camera-hidden { display: none !important; }
 
-/* === FORM / CONTENT === */
+/* === FORM AREA === */
 #modeContent {
   flex: 1;
   background: white;
@@ -204,11 +204,10 @@ li {
   #menuPanel {
     flex-direction: row;
     justify-content: space-around;
-    align-items: center;
+    align-items: flex-start;
     padding: 10px;
   }
   #menuPanel button { flex: 1; margin: 0 5px; font-size: 0.9rem; }
-  #cameraSelectorContainer { flex: 0 0 auto; width: 30%; }
   #topPanel { flex-direction: column; }
   #cameraArea { flex: 0 0 40%; height: 40vh; }
   #modeContent { flex: 1; }

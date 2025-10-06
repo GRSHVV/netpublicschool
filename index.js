@@ -239,6 +239,8 @@ function detectParentFace() {
     }
   }, 300);
 }
+// Update counts after adding a parent or child
+// Update counts after adding a parent or child
 async function registerUser() {
   const name = safeGet("username").value.trim().toLowerCase();
   const role = safeGet("role").value.toLowerCase();
@@ -246,8 +248,10 @@ async function registerUser() {
   const desc = Array.from(lastDetection.descriptor);
   await window.dbAPI.addUser({ id: Date.now().toString(), name, role, descriptor: desc });
   alert("Parent registered successfully!");
-  loadParents();
+  await loadParents();
+  await updateStats(); // update menu counts
 }
+
 async function loadParents() {
   const list = safeGet("userList");
   const users = await window.dbAPI.getAllUsers();
@@ -320,7 +324,8 @@ async function addChild() {
   if (!name || !cls || !sec) return alert("Fill all fields.");
   await window.dbAPI.addChild({ id: Date.now().toString(), name, class: cls, section: sec });
   safeGet("childName").value = "";
-  loadChildren();
+  await loadChildren();
+  await updateStats(); // update menu counts
 }
 async function loadChildren() {
   const kids = await window.dbAPI.getAllChildren();
@@ -328,6 +333,18 @@ async function loadChildren() {
     ? kids.map((c) => `<li>${c.name} (${c.class}-${c.section})</li>`).join("")
     : "<li>No children registered.</li>";
 }
+
+// === STATS COUNTER UPDATES ===
+async function updateStats() {
+  const parents = await window.dbAPI.getAllUsers();
+  const children = await window.dbAPI.getAllChildren();
+  safeGet("parentCount").textContent = parents.length;
+  safeGet("childCount").textContent = children.length;
+}
+
+
+// Run on load and whenever switching modes
+document.addEventListener("DOMContentLoaded", updateStats);
 async function loadClassSectionOptions(cid, sid) {
   const cs = await window.dbAPI.getAllClasses();
   const ss = await window.dbAPI.getAllSections();
