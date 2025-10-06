@@ -230,7 +230,7 @@ async function getLastAudits(limit = 10) {
    ============================================================ */
 
 window.dbAPI = {
-  openDB,
+  openDB, // ✅ ensure this line exists
   addUser,
   getAllUsers,
   addChild,
@@ -244,3 +244,4 @@ window.dbAPI = {
   addAudit,
   getLastAudits,
 };
+
