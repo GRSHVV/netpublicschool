@@ -288,7 +288,7 @@ function setupMenu() {
   $("btnChild").onclick = loadRegisterChild;
   $("btnLink").onclick = loadLinkParentChild;
   $("btnRecognition").onclick = loadRecognitionMode;
-  $("refreshStatsBtn").onclick = updateStats;
+  //$("refreshStatsBtn").onclick = updateStats;
 }
 
 /* ============================================================
@@ -309,3 +309,4 @@ document.addEventListener("DOMContentLoaded", async () => {
   await updateStats();
   setStatus("✅ App Ready");
 });
+
