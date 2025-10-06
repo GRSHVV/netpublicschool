@@ -128,8 +128,7 @@ function stopCamera() {
    Face Detection & Recognition (with Relation & Multi-Pickup)
    ============================================================ */
 /* ============================================================
-   Face Detection & Recognition
-   (Auto switch to No-Pickup Mode after marking audit)
+   Face Detection & Recognition (Pauses Until Pickup Marked)
    ============================================================ */
 async function startDetectionLoop() {
   if (!modelsLoaded) return;
@@ -140,11 +139,11 @@ async function startDetectionLoop() {
     scoreThreshold: 0.4,
   });
 
-  let tempNoPickup = false; // temporary no-pickup mode flag
+  let loopPaused = false;
 
   detectionLoop = setInterval(async () => {
     try {
-      if (!video || video.readyState < 2) return;
+      if (loopPaused || !video || video.readyState < 2) return;
 
       const detection = await faceapi
         .detectSingleFace(video, options)
@@ -153,12 +152,12 @@ async function startDetectionLoop() {
 
       ctx.clearRect(0, 0, overlay.width, overlay.height);
       const resultDiv = $("recognitionResult");
-      const globalNoPickup = $("noPickupMode")?.checked ?? false;
-      const effectiveNoPickup = globalNoPickup || tempNoPickup;
+      const continuousMode = $("noPickupMode")?.checked ?? false;
 
+      // No face detected
       if (!detection) {
         lastDetection = null;
-        if (currentMode === "recognition" && resultDiv)
+        if (currentMode === "recognition")
           resultDiv.innerHTML = `<p style="opacity:0.6">Show a registered face...</p>`;
         $("registerBtn")?.setAttribute("disabled", true);
         return;
@@ -175,7 +174,7 @@ async function startDetectionLoop() {
         height: box.height * scaleY,
       };
 
-      // -------- Registration Mode --------
+      // Registration mode: show yellow box
       if (currentMode === "registerParent") {
         ctx.strokeStyle = "yellow";
         ctx.lineWidth = 2;
@@ -184,7 +183,7 @@ async function startDetectionLoop() {
         return;
       }
 
-      // -------- Recognition Mode --------
+      // Recognition mode
       if (currentMode === "recognition" && recognitionMatcher) {
         const best = recognitionMatcher.findBestMatch(detection.descriptor);
 
@@ -197,7 +196,6 @@ async function startDetectionLoop() {
           return;
         }
 
-        // Recognized parent
         const users = await window.dbAPI.getAllUsers();
         const parent = users.find((u) => u.name === best.label);
         if (!parent) return;
@@ -210,7 +208,7 @@ async function startDetectionLoop() {
           .map((id) => children.find((c) => c.id === id))
           .filter(Boolean);
 
-        // === Recognized but no linked children ===
+        // Case: no children linked
         if (linked.length === 0) {
           ctx.strokeStyle = "yellow";
           ctx.lineWidth = 3;
@@ -223,14 +221,11 @@ async function startDetectionLoop() {
           return;
         }
 
-        // === Recognized with linked children ===
+        // Case: recognized with children
         ctx.strokeStyle = "lime";
         ctx.lineWidth = 3;
         ctx.strokeRect(drawBox.x, drawBox.y, drawBox.width, drawBox.height);
         playBeep(100, 1000, "square");
-
-        // Skip UI build if continuous mode is active
-        if (effectiveNoPickup) return;
 
         const kidsHtml = linked
           .map(
@@ -263,6 +258,9 @@ async function startDetectionLoop() {
           })
         );
 
+        // Pause recognition until marked if continuous mode is OFF
+        if (!continuousMode) loopPaused = true;
+
         auditBtn.onclick = async () => {
           const selected = Array.from(document.querySelectorAll(".pickupChild:checked")).map(
             (el) => el.value
@@ -289,14 +287,9 @@ async function startDetectionLoop() {
           alert(`✅ Pickup marked for ${selected.length} child(ren).`);
           await showRecentAudits();
 
-          // Switch temporarily into no-pickup mode for 10 seconds
-          tempNoPickup = true;
-          $("noPickupMode").checked = true;
-          resultDiv.innerHTML = `<p style="color:#22c55e;opacity:0.7">Pickup done. Continuing recognition...</p>`;
-          setTimeout(() => {
-            tempNoPickup = false;
-            $("noPickupMode").checked = false;
-          }, 10000); // revert after 10s
+          // Resume recognition automatically
+          loopPaused = false;
+          resultDiv.innerHTML = `<p style="opacity:0.6">Ready for next recognition...</p>`;
         };
 
         await showRecentAudits();
