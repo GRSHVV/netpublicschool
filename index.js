@@ -128,7 +128,8 @@ function stopCamera() {
    Face Detection & Recognition (with Relation & Multi-Pickup)
    ============================================================ */
 /* ============================================================
-   Face Detection & Recognition (with Pickup Control & Restart)
+   Face Detection & Recognition
+   (Auto switch to No-Pickup Mode after marking audit)
    ============================================================ */
 async function startDetectionLoop() {
   if (!modelsLoaded) return;
@@ -139,11 +140,10 @@ async function startDetectionLoop() {
     scoreThreshold: 0.4,
   });
 
-  let loopPaused = false; // pause detection while marking pickup
+  let tempNoPickup = false; // temporary no-pickup mode flag
 
   detectionLoop = setInterval(async () => {
     try {
-      if (loopPaused) return;
       if (!video || video.readyState < 2) return;
 
       const detection = await faceapi
@@ -153,6 +153,8 @@ async function startDetectionLoop() {
 
       ctx.clearRect(0, 0, overlay.width, overlay.height);
       const resultDiv = $("recognitionResult");
+      const globalNoPickup = $("noPickupMode")?.checked ?? false;
+      const effectiveNoPickup = globalNoPickup || tempNoPickup;
 
       if (!detection) {
         lastDetection = null;
@@ -185,7 +187,6 @@ async function startDetectionLoop() {
       // -------- Recognition Mode --------
       if (currentMode === "recognition" && recognitionMatcher) {
         const best = recognitionMatcher.findBestMatch(detection.descriptor);
-        const noPickupMode = $("noPickupMode")?.checked ?? false;
 
         if (best.label === "unknown") {
           ctx.strokeStyle = "red";
@@ -209,6 +210,7 @@ async function startDetectionLoop() {
           .map((id) => children.find((c) => c.id === id))
           .filter(Boolean);
 
+        // === Recognized but no linked children ===
         if (linked.length === 0) {
           ctx.strokeStyle = "yellow";
           ctx.lineWidth = 3;
@@ -221,11 +223,14 @@ async function startDetectionLoop() {
           return;
         }
 
-        // 🟩 Recognized with children
+        // === Recognized with linked children ===
         ctx.strokeStyle = "lime";
         ctx.lineWidth = 3;
         ctx.strokeRect(drawBox.x, drawBox.y, drawBox.width, drawBox.height);
         playBeep(100, 1000, "square");
+
+        // Skip UI build if continuous mode is active
+        if (effectiveNoPickup) return;
 
         const kidsHtml = linked
           .map(
@@ -258,9 +263,6 @@ async function startDetectionLoop() {
           })
         );
 
-        // pause recognition temporarily unless continuous mode is ON
-        if (!noPickupMode) loopPaused = true;
-
         auditBtn.onclick = async () => {
           const selected = Array.from(document.querySelectorAll(".pickupChild:checked")).map(
             (el) => el.value
@@ -287,9 +289,14 @@ async function startDetectionLoop() {
           alert(`✅ Pickup marked for ${selected.length} child(ren).`);
           await showRecentAudits();
 
-          // restart detection loop after marking
-          loopPaused = false;
-          resultDiv.innerHTML = `<p style="opacity:0.6">Show next face...</p>`;
+          // Switch temporarily into no-pickup mode for 10 seconds
+          tempNoPickup = true;
+          $("noPickupMode").checked = true;
+          resultDiv.innerHTML = `<p style="color:#22c55e;opacity:0.7">Pickup done. Continuing recognition...</p>`;
+          setTimeout(() => {
+            tempNoPickup = false;
+            $("noPickupMode").checked = false;
+          }, 10000); // revert after 10s
         };
 
         await showRecentAudits();
