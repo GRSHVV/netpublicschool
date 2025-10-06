@@ -127,6 +127,9 @@ function stopCamera() {
 /* ============================================================
    Face Detection & Recognition (with Relation & Multi-Pickup)
    ============================================================ */
+/* ============================================================
+   Face Detection & Recognition (with Pickup Control & Restart)
+   ============================================================ */
 async function startDetectionLoop() {
   if (!modelsLoaded) return;
   clearInterval(detectionLoop);
@@ -136,8 +139,11 @@ async function startDetectionLoop() {
     scoreThreshold: 0.4,
   });
 
+  let loopPaused = false; // pause detection while marking pickup
+
   detectionLoop = setInterval(async () => {
     try {
+      if (loopPaused) return;
       if (!video || video.readyState < 2) return;
 
       const detection = await faceapi
@@ -157,7 +163,6 @@ async function startDetectionLoop() {
       }
 
       lastDetection = detection;
-
       const box = detection.detection.box;
       const scaleX = overlay.width / video.videoWidth;
       const scaleY = overlay.height / video.videoHeight;
@@ -180,6 +185,7 @@ async function startDetectionLoop() {
       // -------- Recognition Mode --------
       if (currentMode === "recognition" && recognitionMatcher) {
         const best = recognitionMatcher.findBestMatch(detection.descriptor);
+        const noPickupMode = $("noPickupMode")?.checked ?? false;
 
         if (best.label === "unknown") {
           ctx.strokeStyle = "red";
@@ -203,79 +209,97 @@ async function startDetectionLoop() {
           .map((id) => children.find((c) => c.id === id))
           .filter(Boolean);
 
-        if (linked.length > 0) {
-          ctx.strokeStyle = "lime";
-          playBeep(100, 1000, "square");
-
-          // Child selection list
-          const kidsHtml = linked
-            .map(
-              (c) => `
-                <label style="display:block;margin:3px 0;">
-                  <input type="checkbox" class="pickupChild" value="${c.id}">
-                  ${c.name} (${c.class}-${c.section})
-                </label>`
-            )
-            .join("");
-
-          resultDiv.innerHTML = `
-            <p style="color:#22c55e;font-weight:bold;">✅ Recognized: ${best.label}</p>
-            <p style="margin-top:-5px;">Relation: <strong>${parent.role}</strong></p>
-            <p>Linked Children:</p>
-            <div style="max-height:120px;overflow-y:auto;border:1px solid #ddd;padding:4px;border-radius:6px;">
-              ${kidsHtml}
-            </div>
-            <button id="auditBtn" style="margin-top:6px;">Mark Pickup</button>
-            <div id="recentAudits" style="margin-top:10px;font-size:0.9rem;"></div>
-          `;
-
-          // Handle pickup button
-          $("auditBtn").onclick = async () => {
-            const selected = Array.from(document.querySelectorAll(".pickupChild:checked")).map(
-              (el) => el.value
-            );
-            if (selected.length === 0) return alert("Select at least one child to mark pickup.");
-
-            const now = new Date();
-            const formatted = now.toLocaleString();
-
-            for (const chId of selected) {
-              const child = linked.find((c) => c.id === chId);
-              await window.dbAPI.addAudit({
-                id: Date.now().toString() + Math.random(),
-                parentName: parent.name,
-                relation: parent.role,
-                childName: child.name,
-                class: child.class,
-                section: child.section,
-                pickupTime: formatted,
-              });
-            }
-
-            alert(`✅ Pickup marked for ${selected.length} child(ren).`);
-            showRecentAudits();
-          };
-
-          showRecentAudits(); // show existing records
-        } else {
-          // Recognized but no children
+        if (linked.length === 0) {
           ctx.strokeStyle = "yellow";
+          ctx.lineWidth = 3;
+          ctx.strokeRect(drawBox.x, drawBox.y, drawBox.width, drawBox.height);
           playBeep(200, 800, "triangle");
           resultDiv.innerHTML = `
             <p style="color:#eab308;font-weight:bold;">⚠️ Recognized: ${best.label}</p>
             <p>Relation: <strong>${parent.role}</strong></p>
-            <p>No linked children found.</p>
-          `;
+            <p>No linked children found.</p>`;
+          return;
         }
 
+        // 🟩 Recognized with children
+        ctx.strokeStyle = "lime";
         ctx.lineWidth = 3;
         ctx.strokeRect(drawBox.x, drawBox.y, drawBox.width, drawBox.height);
+        playBeep(100, 1000, "square");
+
+        const kidsHtml = linked
+          .map(
+            (c) => `
+              <label style="display:block;margin:3px 0;">
+                <input type="checkbox" class="pickupChild" value="${c.id}">
+                ${c.name} (${c.class}-${c.section})
+              </label>`
+          )
+          .join("");
+
+        resultDiv.innerHTML = `
+          <p style="color:#22c55e;font-weight:bold;">✅ Recognized: ${best.label}</p>
+          <p style="margin-top:-5px;">Relation: <strong>${parent.role}</strong></p>
+          <p>Linked Children:</p>
+          <div style="max-height:120px;overflow-y:auto;border:1px solid #ddd;padding:4px;border-radius:6px;">
+            ${kidsHtml}
+          </div>
+          <button id="auditBtn" disabled style="margin-top:6px;">Mark Pickup</button>
+          <div id="recentAudits" style="margin-top:10px;font-size:0.9rem;"></div>
+        `;
+
+        const checkboxes = document.querySelectorAll(".pickupChild");
+        const auditBtn = $("auditBtn");
+
+        checkboxes.forEach((cb) =>
+          cb.addEventListener("change", () => {
+            const anyChecked = Array.from(checkboxes).some((c) => c.checked);
+            auditBtn.disabled = !anyChecked;
+          })
+        );
+
+        // pause recognition temporarily unless continuous mode is ON
+        if (!noPickupMode) loopPaused = true;
+
+        auditBtn.onclick = async () => {
+          const selected = Array.from(document.querySelectorAll(".pickupChild:checked")).map(
+            (el) => el.value
+          );
+          if (selected.length === 0) return alert("Select at least one child to mark pickup.");
+
+          const now = new Date();
+          const formatted = now.toLocaleString();
+
+          for (const chId of selected) {
+            const child = linked.find((c) => c.id === chId);
+            await window.dbAPI.addAudit({
+              id: Date.now().toString() + Math.random(),
+              parentName: parent.name,
+              relation: parent.role,
+              childName: child.name,
+              class: child.class,
+              section: child.section,
+              pickupTime: formatted,
+              timestamp: Date.now(),
+            });
+          }
+
+          alert(`✅ Pickup marked for ${selected.length} child(ren).`);
+          await showRecentAudits();
+
+          // restart detection loop after marking
+          loopPaused = false;
+          resultDiv.innerHTML = `<p style="opacity:0.6">Show next face...</p>`;
+        };
+
+        await showRecentAudits();
       }
     } catch (err) {
       console.error("Detection loop error:", err);
     }
   }, 600);
 }
+
 
 /* ============================================================
    Recent Audit Viewer
