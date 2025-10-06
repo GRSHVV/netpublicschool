@@ -1,4 +1,3 @@
-
 /* ============================================================
    Smart Pickup System - Main Frontend Logic
    ============================================================ */
@@ -19,20 +18,19 @@ function safeGet(id) {
    ============================================================ */
 document.addEventListener("DOMContentLoaded", async () => {
   console.log("🚀 Initializing Smart Pickup App...");
+  video = safeGet("video");
+  overlay = safeGet("overlay");
+  ctx = overlay.getContext("2d");
 
-  if (window.dbAPI && typeof window.dbAPI.openDB === "function") {
+  // Ensure IndexedDB initialized
+  if (window.dbAPI && window.dbAPI.openDB) {
     await window.dbAPI.openDB();
-  } else {
-    console.warn("⚠️ dbAPI not ready yet; retrying...");
-    setTimeout(async () => {
-      if (window.dbAPI && typeof window.dbAPI.openDB === "function") {
-        await window.dbAPI.openDB();
-      }
-    }, 1000);
   }
 
   setupMenu();
   await updateStats();
+
+  safeGet("statusMsg").textContent = "Ready.";
 });
 
 /* ============================================================
@@ -60,16 +58,50 @@ function setupMenu() {
    ============================================================ */
 async function startCamera(deviceId) {
   try {
-    const constraints = {
-      video: { deviceId: deviceId ? { exact: deviceId } : undefined },
-    };
-    const stream = await navigator.mediaDevices.getUserMedia(constraints);
+    const devices = await navigator.mediaDevices.enumerateDevices();
+    const videoDevices = devices.filter((d) => d.kind === "videoinput");
+
+    const select = safeGet("cameraSelect");
+    if (select) {
+      select.innerHTML = "";
+      videoDevices.forEach((d) => {
+        const opt = document.createElement("option");
+        opt.value = d.deviceId;
+        opt.textContent = d.label || `Camera ${select.length + 1}`;
+        select.appendChild(opt);
+      });
+
+      select.onchange = async () => {
+        const chosen = select.value;
+        console.log("🔁 Switching to:", chosen);
+        await startCamera(chosen);
+      };
+    }
+
+    if (videoDevices.length === 0) {
+      alert("No camera detected!");
+      return;
+    }
+
+    const chosenId = deviceId || videoDevices[0].deviceId;
+
+    const stream = await navigator.mediaDevices.getUserMedia({
+      video: { deviceId: { exact: chosenId } },
+    });
+
+    if (video.srcObject) {
+      const tracks = video.srcObject.getTracks();
+      tracks.forEach((t) => t.stop());
+    }
+
     video.srcObject = stream;
-    video.play();
-    console.log("📷 Camera started.");
+    await video.play();
+    console.log("📷 Camera started:", chosenId);
   } catch (err) {
-    console.error("Camera error:", err);
-    alert("Camera permission denied or unavailable.");
+    console.error("🚫 Camera error:", err);
+    alert(
+      "Camera access denied or not available. Please check browser permissions and HTTPS setup."
+    );
   }
 }
 
@@ -303,4 +335,3 @@ async function updateStats() {
   safeGet("parentCount").textContent = parents.length;
   safeGet("childCount").textContent = children.length;
 }
-
