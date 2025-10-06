@@ -1,7 +1,7 @@
 "use strict";
 
 /* ============================================================
-   Smart Pickup App - Final Full Version (3-Color Recognition)
+   Smart Pickup App - Final Version with Conditional Camera View
    ============================================================ */
 
 let video, overlay, ctx;
@@ -54,7 +54,6 @@ async function loadFaceModels() {
     ]);
     modelsLoaded = true;
     setStatus("✅ Models loaded.");
-    log("Face models ready");
   } catch (e) {
     console.error("Model load error:", e);
     alert("❌ Failed to load models. Check ./models folder and paths.");
@@ -81,7 +80,6 @@ async function populateCameraList() {
     });
 
     select.onchange = async () => await startCamera(select.value);
-
     if (allVideoDevices.length > 0 && !currentCameraId) {
       currentCameraId = allVideoDevices[0].deviceId;
       select.value = currentCameraId;
@@ -93,10 +91,7 @@ async function populateCameraList() {
 
 async function startCamera(deviceId = null) {
   try {
-    if (video?.srcObject) {
-      video.srcObject.getTracks().forEach((t) => t.stop());
-    }
-
+    stopCamera();
     const constraints = deviceId
       ? { video: { deviceId: { ideal: deviceId } } }
       : { video: { facingMode: { ideal: "environment" } } };
@@ -114,6 +109,16 @@ async function startCamera(deviceId = null) {
     console.error("Camera error:", e);
     alert("❌ Camera permission denied or unavailable.");
   }
+}
+
+function stopCamera() {
+  clearInterval(detectionLoop);
+  if (video?.srcObject) {
+    video.srcObject.getTracks().forEach((t) => t.stop());
+    video.srcObject = null;
+  }
+  ctx?.clearRect(0, 0, overlay.width, overlay.height);
+  setStatus("Camera stopped");
 }
 
 /* ============================================================
@@ -192,7 +197,6 @@ async function startDetectionLoop() {
           .filter(Boolean);
 
         if (linked.length > 0) {
-          // 🟩 Recognized & children found
           ctx.strokeStyle = "lime";
           playBeep(100, 1000, "square");
           const kidsHtml = linked
@@ -205,7 +209,6 @@ async function startDetectionLoop() {
             <button id="auditBtn">Mark Pickup</button>
           `;
         } else {
-          // 🟨 Recognized but no children linked
           ctx.strokeStyle = "yellow";
           playBeep(200, 800, "triangle");
           resultDiv.innerHTML = `
@@ -250,14 +253,20 @@ async function buildMatcherFromDB() {
     }
   }
   recognitionMatcher = labeled.length ? new faceapi.FaceMatcher(labeled, 0.55) : null;
-  log("Matcher built:", labeled.length);
 }
 
 /* ============================================================
-   Admin: Register Parent
+   Admin & UI Modules
    ============================================================ */
+function toggleCameraVisibility(show) {
+  const display = show ? "block" : "none";
+  if (video) video.style.display = display;
+  if (overlay) overlay.style.display = display;
+}
+
 async function loadRegisterParent() {
   currentMode = "registerParent";
+  toggleCameraVisibility(true);
   $("modeContent").innerHTML = `
     <h3>Register Parent</h3>
     <label>Parent Name:</label>
@@ -285,11 +294,10 @@ async function loadRegisterParent() {
   };
 }
 
-/* ============================================================
-   Manage Classes & Sections
-   ============================================================ */
 async function loadClassManager() {
   currentMode = "classManager";
+  toggleCameraVisibility(false);
+  stopCamera();
   $("modeContent").innerHTML = `
     <h3>Manage Classes & Sections</h3>
     <label>Class:</label>
@@ -326,11 +334,10 @@ async function refreshClassSectionLists() {
   $("sectionList").innerHTML = sections.map((s) => `<li>${s.sectionName}</li>`).join("");
 }
 
-/* ============================================================
-   Register Child
-   ============================================================ */
 async function loadRegisterChild() {
   currentMode = "registerChild";
+  toggleCameraVisibility(false);
+  stopCamera();
   const classes = await window.dbAPI.getAllClasses();
   const sections = await window.dbAPI.getAllSections();
   $("modeContent").innerHTML = `
@@ -358,11 +365,10 @@ async function loadRegisterChild() {
   };
 }
 
-/* ============================================================
-   Link Parent & Child
-   ============================================================ */
 async function loadLinkParentChild() {
   currentMode = "link";
+  toggleCameraVisibility(false);
+  stopCamera();
   const parents = await window.dbAPI.getAllUsers();
   const children = await window.dbAPI.getAllChildren();
   $("modeContent").innerHTML = `
@@ -382,11 +388,9 @@ async function loadLinkParentChild() {
   };
 }
 
-/* ============================================================
-   Recognition Mode
-   ============================================================ */
 async function loadRecognitionMode() {
   currentMode = "recognition";
+  toggleCameraVisibility(true);
   $("modeContent").innerHTML = `
     <h3>Recognition Mode</h3>
     <div id="recognitionResult">Show a registered face...</div>
@@ -395,7 +399,7 @@ async function loadRecognitionMode() {
 }
 
 /* ============================================================
-   Stats
+   Stats and Menu Setup
    ============================================================ */
 async function updateStats() {
   const parents = await window.dbAPI.getAllUsers();
@@ -404,9 +408,6 @@ async function updateStats() {
   $("childCount").textContent = children.length;
 }
 
-/* ============================================================
-   Menu Setup
-   ============================================================ */
 function setupMenu() {
   const bind = (id, fn) => { const el = $(id); if (el) el.onclick = fn; };
   bind("btnAdmin", loadRegisterParent);
@@ -427,10 +428,12 @@ document.addEventListener("DOMContentLoaded", async () => {
   if (window.dbAPI && typeof window.dbAPI.openDB === "function") {
     await window.dbAPI.openDB();
   }
+
   setupMenu();
   await loadFaceModels();
   await populateCameraList();
   await buildMatcherFromDB();
   await updateStats();
+  toggleCameraVisibility(false); // hidden by default
   setStatus("✅ App Ready");
 });
