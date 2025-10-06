@@ -1,3 +1,4 @@
+
 /* ============================================================
    Smart Pickup System - Main Frontend Logic
    ============================================================ */
@@ -18,19 +19,20 @@ function safeGet(id) {
    ============================================================ */
 document.addEventListener("DOMContentLoaded", async () => {
   console.log("🚀 Initializing Smart Pickup App...");
-  video = safeGet("video");
-  overlay = safeGet("overlay");
-  ctx = overlay.getContext("2d");
 
-  // Ensure IndexedDB initialized
-  if (window.dbAPI && window.dbAPI.openDB) {
+  if (window.dbAPI && typeof window.dbAPI.openDB === "function") {
     await window.dbAPI.openDB();
+  } else {
+    console.warn("⚠️ dbAPI not ready yet; retrying...");
+    setTimeout(async () => {
+      if (window.dbAPI && typeof window.dbAPI.openDB === "function") {
+        await window.dbAPI.openDB();
+      }
+    }, 1000);
   }
 
   setupMenu();
   await updateStats();
-
-  safeGet("statusMsg").textContent = "Ready.";
 });
 
 /* ============================================================
@@ -301,3 +303,4 @@ async function updateStats() {
   safeGet("parentCount").textContent = parents.length;
   safeGet("childCount").textContent = children.length;
 }
+
