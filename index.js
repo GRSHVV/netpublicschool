@@ -4,11 +4,13 @@
 
 let video, overlay, ctx;
 let currentMode = "none";
-let lastDetection = null;
 let modelsLoaded = false;
+let currentCameraId = null;
+let allVideoDevices = [];
+let lastDetection = null;
 
 /* ============================================================
-   Utility Helpers
+   Utility Helper
    ============================================================ */
 function safeGet(id) {
   return document.getElementById(id);
@@ -23,15 +25,16 @@ document.addEventListener("DOMContentLoaded", async () => {
   overlay = safeGet("overlay");
   ctx = overlay.getContext("2d");
 
-  // Ensure DB ready
   if (window.dbAPI && typeof window.dbAPI.openDB === "function") {
     await window.dbAPI.openDB();
   }
 
   setupMenu();
   await updateStats();
-  await loadFaceModels(); // ✅ load models before any camera use
-  safeGet("statusMsg").textContent = "Ready.";
+  await loadFaceModels();
+  await initCameraSystem(); // ✅ setup + populate + start default camera
+
+  safeGet("statusMsg").textContent = "✅ Ready.";
 });
 
 /* ============================================================
@@ -39,10 +42,9 @@ document.addEventListener("DOMContentLoaded", async () => {
    ============================================================ */
 async function loadFaceModels() {
   try {
-    safeGet("statusMsg").textContent = "⏳ Loading AI face models...";
+    safeGet("statusMsg").textContent = "⏳ Loading AI models...";
     console.log("🧠 Loading face-api models...");
 
-    // Load from relative ./models path
     await Promise.all([
       faceapi.nets.tinyFaceDetector.loadFromUri("./models"),
       faceapi.nets.faceLandmark68Net.loadFromUri("./models"),
@@ -50,13 +52,11 @@ async function loadFaceModels() {
     ]);
 
     modelsLoaded = true;
-    console.log("✅ All models loaded successfully");
-    safeGet("statusMsg").textContent = "✅ Models loaded. Ready for face detection.";
+    console.log("✅ Models loaded successfully");
+    safeGet("statusMsg").textContent = "Models ready for face detection.";
   } catch (err) {
     console.error("❌ Error loading models:", err);
-    alert(
-      "Failed to load AI models. Ensure your ./models folder is present and accessible."
-    );
+    alert("Failed to load AI models. Ensure ./models folder is accessible.");
   }
 }
 
@@ -81,58 +81,70 @@ function setupMenu() {
 }
 
 /* ============================================================
-   Camera Initialization (Secure + Retry + Switch Support)
+   Camera Initialization + Switch Handling
    ============================================================ */
+async function populateCameraList() {
+  try {
+    const devices = await navigator.mediaDevices.enumerateDevices();
+    allVideoDevices = devices.filter((d) => d.kind === "videoinput");
+
+    const select = safeGet("cameraSelect");
+    if (!select) return;
+    select.innerHTML = "";
+
+    if (allVideoDevices.length === 0) {
+      const opt = document.createElement("option");
+      opt.textContent = "No camera found";
+      opt.disabled = true;
+      select.appendChild(opt);
+      safeGet("statusMsg").textContent = "❌ No camera detected.";
+      return;
+    }
+
+    allVideoDevices.forEach((device, i) => {
+      const opt = document.createElement("option");
+      opt.value = device.deviceId;
+      opt.textContent = device.label || `Camera ${i + 1}`;
+      select.appendChild(opt);
+    });
+
+    select.onchange = async () => {
+      const chosen = select.value;
+      console.log("🔁 Switching to camera:", chosen);
+      await startCamera(chosen);
+    };
+
+    if (!currentCameraId && allVideoDevices.length > 0) {
+      currentCameraId = allVideoDevices[0].deviceId;
+      select.value = currentCameraId;
+    }
+  } catch (err) {
+    console.error("🚫 Camera enumeration error:", err);
+    safeGet("statusMsg").textContent = "Unable to list cameras. Check permissions.";
+  }
+}
+
 async function startCamera(deviceId = null) {
   try {
-    // Stop any previous stream
+    // Stop old stream
     if (video && video.srcObject) {
       video.srcObject.getTracks().forEach((t) => t.stop());
       video.srcObject = null;
     }
 
-    // Enumerate devices
-    const devices = await navigator.mediaDevices.enumerateDevices();
-    const videoDevices = devices.filter((d) => d.kind === "videoinput");
+    if (!allVideoDevices.length) await populateCameraList();
 
-    if (videoDevices.length === 0) {
-      safeGet("statusMsg").textContent = "❌ No camera found.";
-      alert("No camera found on this device!");
-      return;
-    }
-
-    const select = safeGet("cameraSelect");
-    if (select) {
-      select.innerHTML = "";
-      videoDevices.forEach((d, i) => {
-        const opt = document.createElement("option");
-        opt.value = d.deviceId;
-        opt.textContent = d.label || `Camera ${i + 1}`;
-        select.appendChild(opt);
-      });
-
-      select.value = deviceId || videoDevices[0].deviceId;
-
-      select.onchange = async () => {
-        const chosen = select.value;
-        console.log("🔁 Switching camera:", chosen);
-        safeGet("statusMsg").textContent = "Switching camera...";
-        await startCamera(chosen);
-      };
-    }
-
-    // Determine proper constraints
     let constraints;
     if (deviceId) {
-      // Mobile browsers sometimes reject { exact: deviceId }
+      currentCameraId = deviceId;
       constraints = {
         video: {
           deviceId: { ideal: deviceId },
-          facingMode: "environment",
+          width: { ideal: 1280 },
+          height: { ideal: 720 },
         },
       };
     } else {
-      // Try back camera first on tablets/mobiles
       constraints = {
         video: {
           facingMode: { ideal: "environment" },
@@ -143,39 +155,45 @@ async function startCamera(deviceId = null) {
     }
 
     console.log("🎥 Starting camera with constraints:", constraints);
-
     const stream = await navigator.mediaDevices.getUserMedia(constraints);
-
     video.srcObject = stream;
     await video.play();
+
+    overlay.width = video.videoWidth;
+    overlay.height = video.videoHeight;
 
     safeGet("statusMsg").textContent = "📷 Camera active.";
     console.log("✅ Camera started successfully");
 
-    // Fix overlay sizing on mobile/tablet
-    overlay.width = video.videoWidth;
-    overlay.height = video.videoHeight;
-
     if (modelsLoaded) detectFaces();
   } catch (err) {
-    console.error("🚫 Camera error:", err);
-
+    console.error("🚫 Camera start error:", err);
     let msg = "Camera error.";
-    if (err.name === "NotAllowedError") {
-      msg = "Camera permission denied. Please allow camera access.";
-    } else if (err.name === "NotFoundError") {
-      msg = "No camera detected on this device.";
-    } else if (err.name === "NotReadableError") {
-      msg = "Camera is busy. Close other apps using the camera.";
-    } else if (err.name === "OverconstrainedError") {
-      msg = "Camera not available. Retrying...";
-      safeGet("statusMsg").textContent = msg;
+    if (err.name === "NotAllowedError") msg = "Camera permission denied.";
+    else if (err.name === "NotFoundError") msg = "No camera found.";
+    else if (err.name === "NotReadableError") msg = "Camera busy.";
+    else if (err.name === "OverconstrainedError") {
+      msg = "Selected camera unavailable. Retrying...";
       setTimeout(() => startCamera(), 1500);
       return;
     }
-
-    safeGet("statusMsg").textContent = msg;
     alert(msg);
+    safeGet("statusMsg").textContent = msg;
+  }
+}
+
+async function initCameraSystem() {
+  try {
+    await navigator.mediaDevices.getUserMedia({ video: true });
+  } catch (e) {
+    console.warn("⚠️ Camera permission not granted yet.");
+  }
+
+  await populateCameraList();
+  if (allVideoDevices.length > 0) {
+    await startCamera(allVideoDevices[0].deviceId);
+  } else {
+    safeGet("statusMsg").textContent = "❌ No camera available.";
   }
 }
 
@@ -197,7 +215,6 @@ async function detectFaces() {
       height: overlay.height,
     });
     faceapi.draw.drawDetections(overlay, resized);
-    faceapi.draw.drawFaceLandmarks(overlay, resized);
 
     if (detections.length > 0) {
       lastDetection = detections[0];
@@ -224,11 +241,28 @@ async function loadRegisterParent() {
       <option value="guardian">Guardian</option>
     </select>
     <button id="registerBtn" disabled>Register Parent</button>
-    <p style="font-size:0.9rem;color:gray;">Face must be detected before enabling Register button.</p>
+    <p style="font-size:0.9rem;color:gray;">Face must be detected before enabling Register.</p>
   `;
 
   safeGet("statusMsg").textContent = "Camera ready for registration...";
   await startCamera();
+
+  safeGet("registerBtn").onclick = async () => {
+    const name = safeGet("username").value.trim().toLowerCase();
+    const role = safeGet("role").value.toLowerCase();
+    if (!name) return alert("Please enter parent name.");
+    if (!lastDetection) return alert("No face detected yet.");
+
+    const desc = Array.from(lastDetection.descriptor);
+    await window.dbAPI.addUser({
+      id: Date.now().toString(),
+      name,
+      role,
+      descriptor: desc,
+    });
+    alert("✅ Parent registered successfully!");
+    await updateStats();
+  };
 }
 
 /* ============================================================
@@ -272,7 +306,7 @@ async function loadRegisterChild() {
 }
 
 /* ============================================================
-   Mode: Manage Classes & Sections
+   Manage Classes & Sections
    ============================================================ */
 async function loadClassManager() {
   currentMode = "classManager";
@@ -322,21 +356,15 @@ async function refreshClassSectionLists() {
   const classes = await window.dbAPI.getAllClasses();
   const sections = await window.dbAPI.getAllSections();
   safeGet("classList").innerHTML = classes
-    .map(
-      (c) =>
-        `<li>${c.className} <button class="delBtn" onclick="deleteClass('${c.id}')">❌</button></li>`
-    )
+    .map((c) => `<li>${c.className}</li>`)
     .join("");
   safeGet("sectionList").innerHTML = sections
-    .map(
-      (s) =>
-        `<li>${s.sectionName} <button class="delBtn" onclick="deleteSection('${s.id}')">❌</button></li>`
-    )
+    .map((s) => `<li>${s.sectionName}</li>`)
     .join("");
 }
 
 /* ============================================================
-   Mode: Link Parent and Child
+   Link Parent & Child
    ============================================================ */
 async function loadLinkParentChild() {
   currentMode = "link";
@@ -349,14 +377,10 @@ async function loadLinkParentChild() {
     <select id="parentSelect">
       ${parents.map((p) => `<option value="${p.id}">${p.name}</option>`).join("")}
     </select>
-
     <label>Select Child:</label>
     <select id="childSelect" multiple size="5">
-      ${children
-        .map((c) => `<option value="${c.id}">${c.name} (${c.class}-${c.section})</option>`)
-        .join("")}
+      ${children.map((c) => `<option value="${c.id}">${c.name} (${c.class}-${c.section})</option>`).join("")}
     </select>
-
     <button id="linkBtn">Link Selected</button>
   `;
 
@@ -374,25 +398,25 @@ async function loadLinkParentChild() {
         childId,
       });
     }
-    alert("✅ Parent and children linked successfully!");
+    alert("✅ Linked successfully!");
   };
 }
 
 /* ============================================================
-   Mode: Recognition
+   Recognition Mode
    ============================================================ */
 async function loadRecognitionMode() {
   currentMode = "recognition";
   safeGet("modeContent").innerHTML = `
     <h3>Recognition Mode</h3>
-    <p>Show your face to the camera to identify registered parent.</p>
+    <p>Show your face to identify registered parent.</p>
     <div id="recognitionStatus">Waiting for camera...</div>
   `;
   await startCamera();
 }
 
 /* ============================================================
-   STATS COUNTER
+   Stats Counter
    ============================================================ */
 async function updateStats() {
   const parents = await window.dbAPI.getAllUsers();
