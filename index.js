@@ -1,28 +1,48 @@
 "use strict";
 
 /* ============================================================
-   Smart Pickup App (Working Full Version)
+   Smart Pickup App - Final Full Version (3-Color Recognition)
    ============================================================ */
 
 let video, overlay, ctx;
 let modelsLoaded = false;
 let detectionLoop = null;
-let currentMode = null;
+let currentMode = "none";
 let currentCameraId = null;
 let allVideoDevices = [];
 let recognitionMatcher = null;
 let lastDetection = null;
 
 /* ============================================================
-   Helper Functions
+   Helpers
    ============================================================ */
 const $ = (id) => document.getElementById(id);
 const log = (...a) => console.log("[LOG]", ...a);
 const setStatus = (msg) => { if ($("statusMsg")) $("statusMsg").textContent = msg; };
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
+function playBeep(durationMs = 120, freq = 1000, type = "sine") {
+  try {
+    const ctx = new (window.AudioContext || window.webkitAudioContext)();
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+    osc.type = type;
+    osc.frequency.value = freq;
+    osc.connect(gain);
+    gain.connect(ctx.destination);
+    gain.gain.value = 0.05;
+    osc.start();
+    setTimeout(() => {
+      osc.stop();
+      ctx.close();
+    }, durationMs);
+  } catch (e) {
+    console.warn("Audio not supported", e);
+  }
+}
+
 /* ============================================================
-   Load Face API Models
+   Face API Model Loading
    ============================================================ */
 async function loadFaceModels() {
   try {
@@ -33,11 +53,11 @@ async function loadFaceModels() {
       faceapi.nets.faceRecognitionNet.loadFromUri("./models"),
     ]);
     modelsLoaded = true;
-    log("✅ Face models loaded");
-    setStatus("Models ready");
+    setStatus("✅ Models loaded.");
+    log("Face models ready");
   } catch (e) {
     console.error("Model load error:", e);
-    alert("❌ Failed to load models — check ./models folder path.");
+    alert("❌ Failed to load models. Check ./models folder and paths.");
   }
 }
 
@@ -60,9 +80,12 @@ async function populateCameraList() {
       select.appendChild(opt);
     });
 
-    select.onchange = async () => {
-      await startCamera(select.value);
-    };
+    select.onchange = async () => await startCamera(select.value);
+
+    if (allVideoDevices.length > 0 && !currentCameraId) {
+      currentCameraId = allVideoDevices[0].deviceId;
+      select.value = currentCameraId;
+    }
   } catch (e) {
     console.error("Camera list error:", e);
   }
@@ -89,46 +112,152 @@ async function startCamera(deviceId = null) {
     setStatus("📷 Camera Active");
   } catch (e) {
     console.error("Camera error:", e);
-    alert("❌ Camera not available or permission denied.");
+    alert("❌ Camera permission denied or unavailable.");
   }
 }
 
 /* ============================================================
-   Face Detection Loop
+   Face Detection & Recognition (3 Colors)
    ============================================================ */
 async function startDetectionLoop() {
   if (!modelsLoaded) return;
   clearInterval(detectionLoop);
-  const options = new faceapi.TinyFaceDetectorOptions({ inputSize: 224 });
+
+  const options = new faceapi.TinyFaceDetectorOptions({ inputSize: 224, scoreThreshold: 0.4 });
 
   detectionLoop = setInterval(async () => {
-    if (!video || video.readyState < 2) return;
-    const detection = await faceapi
-      .detectSingleFace(video, options)
-      .withFaceLandmarks()
-      .withFaceDescriptor();
+    try {
+      if (!video || video.readyState < 2) return;
 
-    ctx.clearRect(0, 0, overlay.width, overlay.height);
+      const detection = await faceapi
+        .detectSingleFace(video, options)
+        .withFaceLandmarks()
+        .withFaceDescriptor();
 
-    if (detection) {
+      ctx.clearRect(0, 0, overlay.width, overlay.height);
+      const resultDiv = $("recognitionResult");
+
+      if (!detection) {
+        lastDetection = null;
+        if (currentMode === "recognition" && resultDiv)
+          resultDiv.innerHTML = `<p style="opacity:0.6">Show a registered face...</p>`;
+        $("registerBtn")?.setAttribute("disabled", true);
+        return;
+      }
+
       lastDetection = detection;
       const box = detection.detection.box;
-      ctx.strokeStyle = "lime";
-      ctx.lineWidth = 2;
-      ctx.strokeRect(box.x, box.y, box.width, box.height);
-      if (currentMode === "registerParent") $("registerBtn").disabled = false;
-    } else {
-      $("registerBtn")?.setAttribute("disabled", true);
+      const scaleX = overlay.width / video.videoWidth;
+      const scaleY = overlay.height / video.videoHeight;
+      const drawBox = {
+        x: box.x * scaleX,
+        y: box.y * scaleY,
+        width: box.width * scaleX,
+        height: box.height * scaleY,
+      };
+
+      // -------- Registration Mode --------
+      if (currentMode === "registerParent") {
+        ctx.strokeStyle = "yellow";
+        ctx.lineWidth = 2;
+        ctx.strokeRect(drawBox.x, drawBox.y, drawBox.width, drawBox.height);
+        $("registerBtn")?.removeAttribute("disabled");
+        return;
+      }
+
+      // -------- Recognition Mode --------
+      if (currentMode === "recognition" && recognitionMatcher) {
+        const best = recognitionMatcher.findBestMatch(detection.descriptor);
+
+        if (best.label === "unknown") {
+          ctx.strokeStyle = "red";
+          ctx.lineWidth = 3;
+          ctx.strokeRect(drawBox.x, drawBox.y, drawBox.width, drawBox.height);
+          resultDiv.innerHTML = `<p style="color:#b91c1c;font-weight:bold;">❌ Unrecognized Face</p>`;
+          playBeep(400, 200, "sine");
+          return;
+        }
+
+        // Recognized
+        const users = await window.dbAPI.getAllUsers();
+        const parent = users.find((u) => u.name === best.label);
+        if (!parent) return;
+
+        const links = await window.dbAPI.getAllLinks();
+        const children = await window.dbAPI.getAllChildren();
+        const linked = links
+          .filter((l) => l.parentId === parent.id)
+          .flatMap((l) => l.childrenIds || [])
+          .map((id) => children.find((c) => c.id === id))
+          .filter(Boolean);
+
+        if (linked.length > 0) {
+          // 🟩 Recognized & children found
+          ctx.strokeStyle = "lime";
+          playBeep(100, 1000, "square");
+          const kidsHtml = linked
+            .map((c) => `<li>${c.name} (${c.class}-${c.section})</li>`)
+            .join("");
+          resultDiv.innerHTML = `
+            <p style="color:#22c55e;font-weight:bold;">✅ Recognized: ${best.label}</p>
+            <p>Linked Children:</p>
+            <ul>${kidsHtml}</ul>
+            <button id="auditBtn">Mark Pickup</button>
+          `;
+        } else {
+          // 🟨 Recognized but no children linked
+          ctx.strokeStyle = "yellow";
+          playBeep(200, 800, "triangle");
+          resultDiv.innerHTML = `
+            <p style="color:#eab308;font-weight:bold;">⚠️ Recognized: ${best.label}</p>
+            <p>No linked children found.</p>
+          `;
+        }
+
+        ctx.lineWidth = 3;
+        ctx.strokeRect(drawBox.x, drawBox.y, drawBox.width, drawBox.height);
+
+        const auditBtn = $("auditBtn");
+        if (auditBtn && linked.length > 0) {
+          auditBtn.onclick = async () => {
+            for (const ch of linked) {
+              await window.dbAPI.addAudit({
+                id: Date.now().toString(),
+                parentId: parent.id,
+                childId: ch.id,
+                timestamp: Date.now(),
+              });
+            }
+            alert("✅ Pickup logged!");
+          };
+        }
+      }
+    } catch (err) {
+      console.error("Detection loop error:", err);
     }
-  }, 500);
+  }, 600);
 }
 
 /* ============================================================
-   Load Pages / Modules
+   Database-Linked Logic
+   ============================================================ */
+async function buildMatcherFromDB() {
+  const users = await window.dbAPI.getAllUsers();
+  const labeled = [];
+  for (const u of users) {
+    if (u.descriptor && Array.isArray(u.descriptor)) {
+      labeled.push(new faceapi.LabeledFaceDescriptors(u.name, [new Float32Array(u.descriptor)]));
+    }
+  }
+  recognitionMatcher = labeled.length ? new faceapi.FaceMatcher(labeled, 0.55) : null;
+  log("Matcher built:", labeled.length);
+}
+
+/* ============================================================
+   Admin: Register Parent
    ============================================================ */
 async function loadRegisterParent() {
   currentMode = "registerParent";
-  clearInterval(detectionLoop);
   $("modeContent").innerHTML = `
     <h3>Register Parent</h3>
     <label>Parent Name:</label>
@@ -142,6 +271,7 @@ async function loadRegisterParent() {
     <button id="registerBtn" disabled>Register</button>
   `;
   await startCamera();
+
   $("registerBtn").onclick = async () => {
     const name = $("parentName").value.trim().toLowerCase();
     const role = $("parentRole").value.toLowerCase();
@@ -155,6 +285,9 @@ async function loadRegisterParent() {
   };
 }
 
+/* ============================================================
+   Manage Classes & Sections
+   ============================================================ */
 async function loadClassManager() {
   currentMode = "classManager";
   $("modeContent").innerHTML = `
@@ -193,6 +326,9 @@ async function refreshClassSectionLists() {
   $("sectionList").innerHTML = sections.map((s) => `<li>${s.sectionName}</li>`).join("");
 }
 
+/* ============================================================
+   Register Child
+   ============================================================ */
 async function loadRegisterChild() {
   currentMode = "registerChild";
   const classes = await window.dbAPI.getAllClasses();
@@ -222,6 +358,9 @@ async function loadRegisterChild() {
   };
 }
 
+/* ============================================================
+   Link Parent & Child
+   ============================================================ */
 async function loadLinkParentChild() {
   currentMode = "link";
   const parents = await window.dbAPI.getAllUsers();
@@ -250,23 +389,9 @@ async function loadRecognitionMode() {
   currentMode = "recognition";
   $("modeContent").innerHTML = `
     <h3>Recognition Mode</h3>
-    <div id="recognitionResult">Show a registered parent face...</div>
+    <div id="recognitionResult">Show a registered face...</div>
   `;
   await startCamera();
-}
-
-/* ============================================================
-   Recognition Matcher
-   ============================================================ */
-async function buildMatcherFromDB() {
-  const users = await window.dbAPI.getAllUsers();
-  const labeled = [];
-  for (const u of users) {
-    if (u.descriptor && Array.isArray(u.descriptor)) {
-      labeled.push(new faceapi.LabeledFaceDescriptors(u.name, [new Float32Array(u.descriptor)]));
-    }
-  }
-  recognitionMatcher = labeled.length ? new faceapi.FaceMatcher(labeled, 0.55) : null;
 }
 
 /* ============================================================
@@ -283,12 +408,12 @@ async function updateStats() {
    Menu Setup
    ============================================================ */
 function setupMenu() {
-  $("btnAdmin").onclick = loadRegisterParent;
-  $("btnClass").onclick = loadClassManager;
-  $("btnChild").onclick = loadRegisterChild;
-  $("btnLink").onclick = loadLinkParentChild;
-  $("btnRecognition").onclick = loadRecognitionMode;
-  //$("refreshStatsBtn").onclick = updateStats;
+  const bind = (id, fn) => { const el = $(id); if (el) el.onclick = fn; };
+  bind("btnAdmin", loadRegisterParent);
+  bind("btnClass", loadClassManager);
+  bind("btnChild", loadRegisterChild);
+  bind("btnLink", loadLinkParentChild);
+  bind("btnRecognition", loadRecognitionMode);
 }
 
 /* ============================================================
@@ -309,4 +434,3 @@ document.addEventListener("DOMContentLoaded", async () => {
   await updateStats();
   setStatus("✅ App Ready");
 });
-
