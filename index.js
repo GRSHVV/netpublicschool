@@ -9,7 +9,7 @@ let detectionInterval = null;
 let recognitionPaused = false;
 let tempNoPickup = false;
 
-/* DOM Helper */
+/* ======= DOM Helper ======= */
 const $ = (id) => document.getElementById(id);
 
 /* ======= FACE MODELS ======= */
@@ -247,13 +247,13 @@ function startDetectionLoop() {
   }, 600);
 }
 
-/* ======= MODE HELPERS ======= */
+/* ======= CAMERA VISIBILITY ======= */
 function toggleCameraVisibility(show) {
   if (show) $("topPanel").style.display = "flex";
   else $("topPanel").style.display = "none";
 }
 
-/* ======= MODULE LOADERS ======= */
+/* ======= REGISTER PARENT ======= */
 async function loadRegisterParent() {
   currentMode = "registerParent";
   $("modeContent").innerHTML = `
@@ -275,10 +275,11 @@ async function loadRegisterParent() {
   };
 }
 
-/* ======= CLASSES + SECTIONS ======= */
+/* ======= MANAGE CLASSES & SECTIONS ======= */
 async function loadClassSection() {
   currentMode = "class";
   toggleCameraVisibility(false);
+
   $("modeContent").innerHTML = `
     <h3>Manage Classes & Sections</h3>
     <div>
@@ -292,35 +293,49 @@ async function loadClassSection() {
     </div>
   `;
 
-  async function render() {
+  async function deleteRecord(store, id) {
+    return new Promise((resolve, reject) => {
+      const tx = window.dbAPI._getDB().transaction(store, "readwrite");
+      const storeObj = tx.objectStore(store);
+      const req = storeObj.delete(id);
+      req.onsuccess = () => resolve();
+      req.onerror = (e) => reject(e);
+    });
+  }
+
+  async function renderLists() {
     const classes = await window.dbAPI.getAllClasses();
     const sections = await window.dbAPI.getAllSections();
 
     $("classList").innerHTML = classes
       .map(
-        (x) =>
-          `<li>${x.className} 
-          <button class="delBtn" data-type="class" data-id="${x.id}">🗑</button></li>`
+        (c) =>
+          `<li>${c.className}
+            <button class="deleteClass" data-id="${c.id}">🗑</button></li>`
       )
       .join("");
 
     $("sectionList").innerHTML = sections
       .map(
-        (x) =>
-          `<li>${x.sectionName} 
-          <button class="delBtn" data-type="section" data-id="${x.id}">🗑</button></li>`
+        (s) =>
+          `<li>${s.sectionName}
+            <button class="deleteSection" data-id="${s.id}">🗑</button></li>`
       )
       .join("");
 
-    document.querySelectorAll(".delBtn").forEach((btn) =>
+    document.querySelectorAll(".deleteClass").forEach((btn) =>
       btn.addEventListener("click", async () => {
-        const type = btn.dataset.type;
-        const id = btn.dataset.id;
-        if (!confirm("Delete this entry?")) return;
-        const store = type === "class" ? "classes" : "sections";
-        const tx = db.transaction(store, "readwrite");
-        tx.objectStore(store).delete(id);
-        tx.oncomplete = render;
+        if (!confirm("Delete this class?")) return;
+        await deleteRecord("classes", btn.dataset.id);
+        await renderLists();
+      })
+    );
+
+    document.querySelectorAll(".deleteSection").forEach((btn) =>
+      btn.addEventListener("click", async () => {
+        if (!confirm("Delete this section?")) return;
+        await deleteRecord("sections", btn.dataset.id);
+        await renderLists();
       })
     );
   }
@@ -329,15 +344,75 @@ async function loadClassSection() {
     const val = $("className").value.trim().toLowerCase();
     if (!val) return alert("Enter class name");
     await window.dbAPI.addClassEntry({ id: Date.now().toString(), className: val });
-    render();
+    await renderLists();
   };
 
   $("addSection").onclick = async () => {
     const val = $("sectionName").value.trim().toLowerCase();
     if (!val) return alert("Enter section name");
     await window.dbAPI.addSectionEntry({ id: Date.now().toString(), sectionName: val });
-    render();
+    await renderLists();
   };
 
-  render();
+  await renderLists();
 }
+
+/* ======= REGISTER CHILD ======= */
+async function loadRegisterChild() {
+  currentMode = "child";
+  toggleCameraVisibility(false);
+  const classes = await window.dbAPI.getAllClasses();
+  const sections = await window.dbAPI.getAllSections();
+  $("modeContent").innerHTML = `
+    <h3>Register Child</h3>
+    <input id="childName" placeholder="Child name" />
+    <select id="childClass">${classes.map((c) => `<option>${c.className}</option>`).join("")}</select>
+    <select id="childSection">${sections.map((s) => `<option>${s.sectionName}</option>`).join("")}</select>
+    <button id="addChild">Register</button>
+  `;
+  $("addChild").onclick = async () => {
+    await window.dbAPI.addChild({
+      id: Date.now().toString(),
+      name: $("childName").value.trim().toLowerCase(),
+      class: $("childClass").value,
+      section: $("childSection").value,
+    });
+    await updateCounts();
+    alert("Child registered successfully!");
+  };
+}
+
+/* ======= RECOGNITION ======= */
+async function loadRecognition() {
+  currentMode = "recognition";
+  $("modeContent").innerHTML = `<h3>Recognition Mode Active</h3>`;
+  toggleCameraVisibility(true);
+  await startCamera();
+  startDetectionLoop();
+}
+
+/* ======= MENU SETUP ======= */
+function setupMenu() {
+  $("btnAdmin").onclick = loadRegisterParent;
+  $("btnClass").onclick = loadClassSection;
+  $("btnChild").onclick = loadRegisterChild;
+  $("btnRecognition").onclick = loadRecognition;
+}
+
+/* ======= INIT ======= */
+document.addEventListener("DOMContentLoaded", async () => {
+  video = $("video");
+  overlay = $("overlay");
+  ctx = overlay.getContext("2d");
+  await window.dbAPI.openDB();
+  await loadModels();
+  await populateCameraList();
+  try {
+    await buildMatcher();
+  } catch (e) {
+    console.warn("Matcher skipped:", e);
+  }
+  setupMenu();
+  await updateCounts();
+  toggleCameraVisibility(false);
+});
