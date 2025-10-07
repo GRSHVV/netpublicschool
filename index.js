@@ -649,13 +649,13 @@ async function loadReports() {
       </div>
       <div style="align-self:flex-end; display:flex; gap:8px;">
         <button id="runReport">Run Report</button>
-        <button id="downloadCSV">Download Report</button>
+        <button id="downloadCSV">Download CSV</button>
       </div>
-
     </div>
     <div id="reportResults" style="max-height:350px;overflow:auto;"></div>
   `;
 
+  // populate dropdowns dynamically AFTER UI is rendered
   const classes = await window.dbAPI.getAllClasses();
   const sections = await window.dbAPI.getAllSections();
 
@@ -666,6 +666,7 @@ async function loadReports() {
     .map((s) => `<option value="${s.sectionName}">${s.sectionName}</option>`)
     .join("");
 
+  // attach handlers only AFTER elements exist
   $("runReport").onclick = async () => {
     const from = $("reportFrom").value ? new Date($("reportFrom").value).getTime() : 0;
     const to = $("reportTo").value ? new Date($("reportTo").value).getTime() + 86400000 : Date.now();
@@ -717,37 +718,37 @@ async function loadReports() {
       </table>
     `;
   };
+
+  // ✅ attach after Run Report (inside loadReports)
+  $("downloadCSV").onclick = () => {
+    const table = document.querySelector("#reportTable");
+    if (!table) {
+      alert("No report data to download. Please run a report first.");
+      return;
+    }
+
+    const rows = [];
+    const trs = table.querySelectorAll("tr");
+    trs.forEach((tr) => {
+      const cells = Array.from(tr.children).map((td) =>
+        `"${td.textContent.replace(/"/g, '""')}"`
+      );
+      rows.push(cells.join(","));
+    });
+
+    const csvContent = rows.join("\n");
+    const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+
+    const today = new Date().toISOString().split("T")[0];
+    a.href = url;
+    a.download = `pickup_report_${today}.csv`;
+    a.click();
+
+    URL.revokeObjectURL(url);
+  };
 }
-
-// === CSV DOWNLOAD HANDLER ===
-$("downloadCSV").onclick = async () => {
-  const table = document.querySelector("#reportTable");
-  if (!table) {
-    alert("No report data to download. Please run a report first.");
-    return;
-  }
-
-  const rows = [];
-  const trs = table.querySelectorAll("tr");
-  trs.forEach((tr) => {
-    const cells = Array.from(tr.children).map((td) =>
-      `"${td.textContent.replace(/"/g, '""')}"`
-    );
-    rows.push(cells.join(","));
-  });
-
-  const csvContent = rows.join("\n");
-  const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement("a");
-
-  const today = new Date().toISOString().split("T")[0];
-  a.href = url;
-  a.download = `pickup_report_${today}.csv`;
-  a.click();
-
-  URL.revokeObjectURL(url);
-};
 
 function setupMenu() {
   const safeBind = (id, fn) => { const el = $(id); if (el) el.onclick = fn; else log("Menu item", id, "missing"); };
@@ -792,6 +793,7 @@ document.addEventListener("DOMContentLoaded", async () => {
 window._pickupDebug = {
   startCamera, stopCamera, startDetectionLoop, buildMatcherFromDB, fetchAudits, showRecentAudits
 };
+
 
 
 
