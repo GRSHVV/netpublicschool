@@ -647,9 +647,11 @@ async function loadReports() {
         <label>Section:</label>
         <select id="reportSection"><option value="">All</option></select>
       </div>
-      <div style="align-self:flex-end;">
+      <div style="align-self:flex-end; display:flex; gap:8px;">
         <button id="runReport">Run Report</button>
+        <button id="downloadCSV">Download Report</button>
       </div>
+
     </div>
     <div id="reportResults" style="max-height:350px;overflow:auto;"></div>
   `;
@@ -717,6 +719,35 @@ async function loadReports() {
   };
 }
 
+// === CSV DOWNLOAD HANDLER ===
+$("downloadCSV").onclick = () => {
+  const table = document.querySelector("#reportTable");
+  if (!table) {
+    alert("No report data to download. Please run a report first.");
+    return;
+  }
+
+  const rows = [];
+  const trs = table.querySelectorAll("tr");
+  trs.forEach((tr) => {
+    const cells = Array.from(tr.children).map((td) =>
+      `"${td.textContent.replace(/"/g, '""')}"`
+    );
+    rows.push(cells.join(","));
+  });
+
+  const csvContent = rows.join("\n");
+  const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+
+  const today = new Date().toISOString().split("T")[0];
+  a.href = url;
+  a.download = `pickup_report_${today}.csv`;
+  a.click();
+
+  URL.revokeObjectURL(url);
+};
 
 function setupMenu() {
   const safeBind = (id, fn) => { const el = $(id); if (el) el.onclick = fn; else log("Menu item", id, "missing"); };
@@ -761,5 +792,6 @@ document.addEventListener("DOMContentLoaded", async () => {
 window._pickupDebug = {
   startCamera, stopCamera, startDetectionLoop, buildMatcherFromDB, fetchAudits, showRecentAudits
 };
+
 
 
