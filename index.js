@@ -21,10 +21,9 @@ async function loadModels() {
       faceapi.nets.faceRecognitionNet.loadFromUri("./models"),
     ]);
     modelsLoaded = true;
-    console.log("✅ Face API models loaded.");
+    console.log("✅ Face API models loaded");
   } catch (e) {
-    console.error("Model load error", e);
-    alert("Failed to load models. Ensure /models folder is present.");
+    alert("Error loading models. Ensure models folder is present.");
   }
 }
 
@@ -39,10 +38,11 @@ async function startCamera(deviceId = null) {
     await video.play();
     overlay.width = video.videoWidth;
     overlay.height = video.videoHeight;
+    $("topPanel").style.display = "flex";
     console.log("📷 Camera started");
     if (modelsLoaded) startDetectionLoop();
   } catch (err) {
-    console.error("Camera start error:", err);
+    console.error("Camera error:", err);
     alert("Camera permission denied or unavailable.");
   }
 }
@@ -53,6 +53,7 @@ function stopCamera() {
     video.srcObject.getTracks().forEach((t) => t.stop());
     video.srcObject = null;
   }
+  $("topPanel").style.display = "none";
 }
 
 async function populateCameraList() {
@@ -113,7 +114,7 @@ async function buildMatcher() {
   console.log("✅ Matcher built with", labeled.length, "face(s)");
 }
 
-/* ======= RECOGNITION LOOP ======= */
+/* ======= DETECTION LOOP ======= */
 function startDetectionLoop() {
   if (!modelsLoaded) return;
   if (detectionInterval) clearInterval(detectionInterval);
@@ -237,7 +238,13 @@ function startDetectionLoop() {
   }, 600);
 }
 
-/* ======= MODES ======= */
+/* ======= MODE HELPERS ======= */
+function toggleCameraVisibility(show) {
+  if (show) $("topPanel").style.display = "flex";
+  else $("topPanel").style.display = "none";
+}
+
+/* ======= MODULE LOADERS ======= */
 async function loadRegisterParent() {
   currentMode = "registerParent";
   $("modeContent").innerHTML = `
@@ -245,6 +252,7 @@ async function loadRegisterParent() {
     <input id="parentName" placeholder="Parent name" />
     <button id="registerBtn" disabled>Register</button>
   `;
+  toggleCameraVisibility(true);
   await startCamera();
   $("registerBtn").onclick = async () => {
     if (!lastDetection) return alert("No face detected");
@@ -259,15 +267,17 @@ async function loadRegisterParent() {
 
 async function loadClassSection() {
   currentMode = "class";
+  toggleCameraVisibility(false);
   $("modeContent").innerHTML = `
-    <h3>Manage Classes</h3>
-    <input id="className" placeholder="Class" />
-    <button id="addClass">Add Class</button>
-    <ul id="classList"></ul>
-    <h3>Manage Sections</h3>
-    <input id="sectionName" placeholder="Section" />
-    <button id="addSection">Add Section</button>
-    <ul id="sectionList"></ul>
+    <h3>Manage Classes & Sections</h3>
+    <div>
+      <input id="className" placeholder="Class" />
+      <button id="addClass">Add Class</button>
+      <ul id="classList"></ul>
+      <input id="sectionName" placeholder="Section" />
+      <button id="addSection">Add Section</button>
+      <ul id="sectionList"></ul>
+    </div>
   `;
   const render = async () => {
     const c = await window.dbAPI.getAllClasses();
@@ -291,11 +301,12 @@ async function loadClassSection() {
 
 async function loadRegisterChild() {
   currentMode = "child";
+  toggleCameraVisibility(false);
   const classes = await window.dbAPI.getAllClasses();
   const sections = await window.dbAPI.getAllSections();
   $("modeContent").innerHTML = `
     <h3>Register Child</h3>
-    <input id="childName" placeholder="Child Name" />
+    <input id="childName" placeholder="Child name" />
     <select id="childClass">${classes.map((c) => `<option>${c.className}</option>`).join("")}</select>
     <select id="childSection">${sections.map((s) => `<option>${s.sectionName}</option>`).join("")}</select>
     <button id="addChild">Register</button>
@@ -313,6 +324,7 @@ async function loadRegisterChild() {
 
 async function loadLinkParentChild() {
   currentMode = "link";
+  toggleCameraVisibility(false);
   const parents = await window.dbAPI.getAllUsers();
   const children = await window.dbAPI.getAllChildren();
   const classes = await window.dbAPI.getAllClasses();
@@ -375,12 +387,13 @@ async function loadLinkParentChild() {
 
 async function loadRecognition() {
   currentMode = "recognition";
-  $("modeContent").innerHTML = `<h3>Recognition Running...</h3>`;
+  $("modeContent").innerHTML = `<h3>Recognition Mode Active</h3>`;
+  toggleCameraVisibility(true);
   await startCamera();
   startDetectionLoop();
 }
 
-/* ======= MENU ======= */
+/* ======= MENU SETUP ======= */
 function setupMenu() {
   $("btnAdmin").onclick = loadRegisterParent;
   $("btnClass").onclick = loadClassSection;
@@ -400,7 +413,8 @@ document.addEventListener("DOMContentLoaded", async () => {
   try {
     await buildMatcher();
   } catch (e) {
-    console.warn("Matcher build skipped:", e);
+    console.warn("Matcher skipped:", e);
   }
   setupMenu();
+  toggleCameraVisibility(false); // hide by default
 });

@@ -3,43 +3,50 @@
 <head>
   <meta charset="UTF-8" />
   <title>Face Recognition Pickup System</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <link rel="stylesheet" href="style.css" />
   <script defer src="face-api.min.js"></script>
   <script defer src="db.js"></script>
   <script defer src="index.js"></script>
 </head>
 <body>
-  <div id="app">
-    <aside id="menu">
-      <h2>Menu</h2>
-      <button id="btnAdmin">Register Parent</button>
-      <button id="btnClass">Manage Classes & Sections</button>
-      <button id="btnChild">Register Child</button>
-      <button id="btnLink">Link Parent–Child</button>
-      <button id="btnRecognition">Recognition Mode</button>
-      <hr />
-      <div id="counts">
-        Parents: <span id="parentCount">0</span><br />
-        Children: <span id="childCount">0</span>
-      </div>
-      <label style="margin-top:10px;">Camera</label>
-      <select id="cameraSelect"></select>
-      <label style="margin-top:10px;">
-        <input type="checkbox" id="noPickupMode" />
-        Continuous Recognition
-      </label>
-      <div id="statusMsg">Initializing...</div>
-    </aside>
-
-    <main id="main">
-      <div id="top-panel">
+  <div id="container">
+    <!-- Left: camera + main panel -->
+    <section id="mainPanel">
+      <div id="topPanel">
         <video id="video" autoplay muted playsinline></video>
         <canvas id="overlay"></canvas>
       </div>
-      <div id="bottom-panel">
-        <div id="modeContent">Select an option from the menu.</div>
+      <div id="bottomPanel">
+        <div id="modeContent">Select a mode from the right menu.</div>
       </div>
-    </main>
+    </section>
+
+    <!-- Right: control/menu panel -->
+    <aside id="sideMenu">
+      <h2>Pickup Admin Panel</h2>
+      <button id="btnAdmin">👤 Register Parent</button>
+      <button id="btnClass">🏫 Manage Classes & Sections</button>
+      <button id="btnChild">👶 Register Child</button>
+      <button id="btnLink">🔗 Link Parent–Child</button>
+      <button id="btnRecognition">🎥 Recognition Mode</button>
+
+      <hr />
+
+      <div class="statusBox">
+        <p>👪 Parents: <span id="parentCount">0</span></p>
+        <p>🧒 Children: <span id="childCount">0</span></p>
+      </div>
+
+      <label for="cameraSelect">📸 Camera:</label>
+      <select id="cameraSelect"></select>
+
+      <label>
+        <input type="checkbox" id="noPickupMode" /> Continuous Recognition
+      </label>
+
+      <div id="statusMsg">Ready</div>
+    </aside>
   </div>
 </body>
 </html>

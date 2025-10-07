@@ -1,94 +1,169 @@
-body {
-  margin: 0;
-  font-family: Arial, sans-serif;
-  background: #f9fafb;
-  color: #111;
+:root {
+  --menu-bg: #e2e8f0;
+  --menu-text: #1e293b;
+  --primary: #2563eb;
+  --accent: #3b82f6;
+  --panel-bg: #f8fafc;
 }
 
-#app {
+body {
+  margin: 0;
+  font-family: "Segoe UI", Roboto, sans-serif;
+  background: var(--panel-bg);
+  color: #111827;
   display: flex;
-  flex-direction: row-reverse; /* menu on right */
+  justify-content: center;
+  align-items: stretch;
   height: 100vh;
   overflow: hidden;
 }
 
-#menu {
+#container {
+  display: flex;
+  flex-direction: row;
+  width: 100%;
+  height: 100%;
+}
+
+/* ======= RIGHT MENU ======= */
+#sideMenu {
   width: 30%;
-  min-width: 250px;
-  background: #1e293b;
-  color: white;
+  min-width: 280px;
+  background: var(--menu-bg);
+  color: var(--menu-text);
   padding: 15px;
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  box-shadow: -2px 0 5px rgba(0, 0, 0, 0.1);
+  overflow-y: auto;
 }
 
-#menu h2 {
+#sideMenu h2 {
   text-align: center;
-  margin-bottom: 10px;
+  margin-bottom: 12px;
+  font-size: 1.3rem;
 }
 
-#menu button {
-  padding: 10px;
-  background: #334155;
+#sideMenu button {
+  background: var(--primary);
   color: white;
   border: none;
   border-radius: 6px;
+  padding: 10px;
+  margin-bottom: 8px;
   cursor: pointer;
-  transition: background 0.3s;
+  transition: background 0.3s ease;
 }
 
-#menu button:hover {
-  background: #475569;
+#sideMenu button:hover {
+  background: var(--accent);
 }
 
-#cameraSelect, #noPickupMode {
+#sideMenu select,
+#sideMenu input[type="checkbox"] {
+  margin-top: 5px;
   width: 100%;
+  font-size: 1rem;
 }
 
-#main {
+#statusMsg {
+  margin-top: auto;
+  font-size: 0.9rem;
+  text-align: center;
+  opacity: 0.7;
+}
+
+.statusBox {
+  background: white;
+  border-radius: 6px;
+  padding: 8px;
+  margin-bottom: 12px;
+  border: 1px solid #cbd5e1;
+}
+
+.statusBox p {
+  margin: 4px 0;
+  font-weight: 500;
+}
+
+/* ======= LEFT MAIN PANEL ======= */
+#mainPanel {
   flex: 1;
   display: flex;
   flex-direction: column;
+  background: var(--panel-bg);
+  padding: 8px;
+  overflow: hidden;
 }
 
-#top-panel {
+#topPanel {
   flex: 0.6;
-  position: relative;
+  background: #000;
   display: flex;
   justify-content: center;
   align-items: center;
-  background: black;
+  position: relative;
+  border-radius: 8px;
+  overflow: hidden;
 }
 
-#bottom-panel {
+#bottomPanel {
   flex: 0.4;
+  background: #f1f5f9;
+  border-radius: 8px;
+  margin-top: 8px;
   padding: 10px;
   overflow-y: auto;
-  background: #f1f5f9;
+  font-size: 1rem;
 }
 
-#video, #overlay {
+#video,
+#overlay {
   position: absolute;
-  width: 90%;
+  width: 100%;
   height: auto;
   border-radius: 8px;
 }
 
-label {
-  display: block;
-  margin-top: 6px;
+/* ======= FORMS ======= */
+#modeContent {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
 }
 
-input, select, button {
+#modeContent input,
+#modeContent select,
+#modeContent button {
   font-size: 1rem;
-  margin-top: 4px;
-  width: 100%;
+  padding: 6px;
+  border-radius: 6px;
+  border: 1px solid #cbd5e1;
 }
 
-#statusMsg {
-  font-size: 0.9rem;
-  opacity: 0.7;
-  margin-top: auto;
-  text-align: center;
+#modeContent button {
+  background: var(--primary);
+  color: white;
+  border: none;
+}
+
+#modeContent button:hover {
+  background: var(--accent);
+}
+
+/* ======= RESPONSIVE ======= */
+@media (max-width: 900px) {
+  #container {
+    flex-direction: column;
+  }
+  #sideMenu {
+    width: 100%;
+    min-width: unset;
+    flex-direction: row;
+    flex-wrap: wrap;
+    justify-content: center;
+  }
+  #mainPanel {
+    flex: 1;
+  }
 }
