@@ -9,16 +9,23 @@ let detectionInterval = null;
 let recognitionPaused = false;
 let tempNoPickup = false;
 
-/* DOM helper */
+/* DOM Helper */
 const $ = (id) => document.getElementById(id);
 
+/* ======= FACE MODELS ======= */
 async function loadModels() {
-  await Promise.all([
-    faceapi.nets.tinyFaceDetector.loadFromUri("./models"),
-    faceapi.nets.faceLandmark68Net.loadFromUri("./models"),
-    faceapi.nets.faceRecognitionNet.loadFromUri("./models"),
-  ]);
-  modelsLoaded = true;
+  try {
+    await Promise.all([
+      faceapi.nets.tinyFaceDetector.loadFromUri("./models"),
+      faceapi.nets.faceLandmark68Net.loadFromUri("./models"),
+      faceapi.nets.faceRecognitionNet.loadFromUri("./models"),
+    ]);
+    modelsLoaded = true;
+    console.log("✅ Face API models loaded.");
+  } catch (e) {
+    console.error("Model load error", e);
+    alert("Failed to load models. Ensure /models folder is present.");
+  }
 }
 
 /* ======= CAMERA ======= */
@@ -32,9 +39,11 @@ async function startCamera(deviceId = null) {
     await video.play();
     overlay.width = video.videoWidth;
     overlay.height = video.videoHeight;
+    console.log("📷 Camera started");
+    if (modelsLoaded) startDetectionLoop();
   } catch (err) {
-    console.error("Camera error", err);
-    alert("Camera access failed");
+    console.error("Camera start error:", err);
+    alert("Camera permission denied or unavailable.");
   }
 }
 
@@ -60,36 +69,54 @@ async function populateCameraList() {
   sel.onchange = async () => await startCamera(sel.value);
 }
 
+/* ======= AUDIO ======= */
+function playBeep(freq, duration, type = "sine") {
+  try {
+    const ctx = new (window.AudioContext || window.webkitAudioContext)();
+    const osc = ctx.createOscillator();
+    osc.frequency.value = freq;
+    osc.type = type;
+    osc.connect(ctx.destination);
+    osc.start();
+    setTimeout(() => {
+      osc.stop();
+      ctx.close();
+    }, duration);
+  } catch {}
+}
+
 /* ======= MATCHER ======= */
 async function buildMatcher() {
   const users = await window.dbAPI.getAllUsers();
-  const labeled = users.map(
-    (u) => new faceapi.LabeledFaceDescriptors(u.name, [new Float32Array(u.descriptor)])
-  );
-  recognitionMatcher = new faceapi.FaceMatcher(labeled, 0.55);
-}
+  if (!users || users.length === 0) {
+    console.warn("No registered faces — matcher skipped");
+    recognitionMatcher = null;
+    return;
+  }
 
-/* ======= AUDIO ======= */
-function playBeep(f, d, type = "sine") {
-  try {
-    const ctx = new (window.AudioContext || window.webkitAudioContext)();
-    const o = ctx.createOscillator();
-    o.frequency.value = f;
-    o.type = type;
-    o.connect(ctx.destination);
-    o.start();
-    setTimeout(() => {
-      o.stop();
-      ctx.close();
-    }, d);
-  } catch {}
+  const labeled = [];
+  for (const u of users) {
+    if (u.descriptor && Array.isArray(u.descriptor) && u.descriptor.length >= 64) {
+      labeled.push(
+        new faceapi.LabeledFaceDescriptors(u.name, [new Float32Array(u.descriptor)])
+      );
+    }
+  }
+
+  if (labeled.length === 0) {
+    console.warn("No valid face descriptors found.");
+    recognitionMatcher = null;
+    return;
+  }
+
+  recognitionMatcher = new faceapi.FaceMatcher(labeled, 0.55);
+  console.log("✅ Matcher built with", labeled.length, "face(s)");
 }
 
 /* ======= RECOGNITION LOOP ======= */
 function startDetectionLoop() {
   if (!modelsLoaded) return;
   if (detectionInterval) clearInterval(detectionInterval);
-
   const options = new faceapi.TinyFaceDetectorOptions({ inputSize: 224, scoreThreshold: 0.4 });
   recognitionPaused = false;
 
@@ -160,7 +187,6 @@ function startDetectionLoop() {
       if ($("noPickupMode").checked || tempNoPickup) return;
 
       recognitionPaused = true;
-
       const kidsHtml = linked
         .map(
           (c) =>
@@ -202,7 +228,7 @@ function startDetectionLoop() {
             timestamp: Date.now(),
           });
         }
-        alert(`✅ Marked pickup for ${selected.length} child(ren).`);
+        alert(`✅ Pickup marked for ${selected.length} child(ren).`);
         tempNoPickup = true;
         recognitionPaused = false;
         setTimeout(() => (tempNoPickup = false), 8000);
@@ -216,7 +242,7 @@ async function loadRegisterParent() {
   currentMode = "registerParent";
   $("modeContent").innerHTML = `
     <h3>Register Parent</h3>
-    <input id="parentName" placeholder="name" />
+    <input id="parentName" placeholder="Parent name" />
     <button id="registerBtn" disabled>Register</button>
   `;
   await startCamera();
@@ -227,7 +253,7 @@ async function loadRegisterParent() {
     const descriptor = Array.from(lastDetection.descriptor);
     await window.dbAPI.addUser({ id: Date.now().toString(), name, descriptor });
     await buildMatcher();
-    alert("Parent registered");
+    alert("Parent registered successfully!");
   };
 }
 
@@ -281,7 +307,7 @@ async function loadRegisterChild() {
       class: $("childClass").value,
       section: $("childSection").value,
     });
-    alert("Child registered");
+    alert("Child registered successfully!");
   };
 }
 
@@ -371,6 +397,10 @@ document.addEventListener("DOMContentLoaded", async () => {
   await window.dbAPI.openDB();
   await loadModels();
   await populateCameraList();
-  await buildMatcher();
+  try {
+    await buildMatcher();
+  } catch (e) {
+    console.warn("Matcher build skipped:", e);
+  }
   setupMenu();
 });
