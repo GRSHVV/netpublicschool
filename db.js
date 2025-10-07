@@ -211,6 +211,18 @@ async function addAudit(record) {
   });
 }
 
+
+async function getAllAudits() {
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction("audits", "readonly");
+    const store = tx.objectStore("audits");
+    const req = store.getAll();
+    req.onsuccess = () => resolve(req.result || []);
+    req.onerror = (e) => reject(e);
+  });
+}
+
+
 async function getLastAudits(limit = 10) {
   const dbConn = await openDB();
   return new Promise((resolve, reject) => {
@@ -243,5 +255,7 @@ window.dbAPI = {
   getAllLinks,
   addAudit,
   getLastAudits,
+  getAllAudits, 
 };
+
 
