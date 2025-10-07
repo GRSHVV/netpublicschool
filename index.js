@@ -458,26 +458,26 @@ function toggleCameraVisibility(show) {
   overlay.style.display = show ? "block" : "none";
 }
 
-/* Register Parent (relation REMOVED) */
 async function loadRegisterParent() {
+  currentMode = "registerParent";
+  toggleCameraVisibility(true);
   $("modeContent").innerHTML = `
     <h3>Register Parent</h3>
-    <label>Parent Name:</label>
-    <input id="parentName" placeholder="enter name in lowercase" />
-    <button id="registerBtn">Register</button>
+    <label>Parent Name</label><input id="parentName" placeholder="name (lowercase will be saved)" />
+    <label>Role</label><select id="parentRole"><option>father</option><option>mother</option><option>guardian</option></select>
+    <div style="margin-top:8px;"><button id="registerBtn" disabled>Register</button></div>
   `;
-
   await startCamera();
   $("registerBtn").onclick = async () => {
     const name = $("parentName").value.trim().toLowerCase();
-    if (!name || !lastDetection) return alert("Show face before registering!");
-
-    const descriptor = Array.from(lastDetection.descriptor);
-    await window.dbAPI.addUser({ id: Date.now().toString(), name, descriptor });
-    await buildMatcher();
-    await updateCounts();
-
-    alert("✅ Parent registered successfully.");
+    const role = $("parentRole").value.trim().toLowerCase();
+    if (!name) return alert("Enter parent name");
+    if (!lastDetection || !lastDetection.descriptor) return alert("No face detected");
+    const desc = Array.from(lastDetection.descriptor);
+    await window.dbAPI.addUser({ id: Date.now().toString(), name, role, descriptor: desc });
+    await buildMatcherFromDB();
+    await updateStats();
+    alert("Parent registered");
   };
 }
 
@@ -665,4 +665,3 @@ document.addEventListener("DOMContentLoaded", async () => {
 window._pickupDebug = {
   startCamera, stopCamera, startDetectionLoop, buildMatcherFromDB, fetchAudits, showRecentAudits
 };
-
