@@ -1,0 +1,39 @@
+// index.js - Load and display recent audit logs
+document.addEventListener("DOMContentLoaded", async () => {
+  await window.dbAPI.openDB();
+  loadAuditLogs();
+  // Refresh every 5 seconds
+  setInterval(loadAuditLogs, 5000);
+});
+
+async function loadAuditLogs() {
+  const audits = await window.dbAPI.getAllAudit();
+  const users = await window.dbAPI.getAllUsers();
+  const children = await window.dbAPI.getAllChildren();
+
+  // Sort by timestamp desc
+  audits.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
+
+  const auditList = document.getElementById("auditList");
+  auditList.innerHTML = "";
+
+  audits.slice(0, 10).forEach(a => { // show latest 10
+    const user = users.find(u => u.id === a.userId);
+    const child = children.find(c => c.id === a.childId);
+    const li = document.createElement("li");
+
+    const main = document.createElement("span");
+    main.textContent = `${user ? user.name : "Unknown"} (${a.label}) → ${child ? child.name + " (" + child.class + child.section + ")" : "Child removed"}`;
+
+    const time = document.createElement("small");
+    time.textContent = new Date(a.timestamp).toLocaleString();
+
+    li.appendChild(main);
+    li.appendChild(time);
+    auditList.appendChild(li);
+  });
+
+  if (!auditList.innerHTML) {
+    auditList.innerHTML = "<li><small>No pickups recorded yet.</small></li>";
+  }
+}

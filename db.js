@@ -1,124 +1,247 @@
-"use strict";
+/* ============================================================
+   IndexedDB Utility for Smart Pickup System
+   ============================================================ */
 
-(() => {
-  const DB_NAME = "FacePickupDB";
-  const DB_VERSION = 6;
-  let db = null;
+const DB_NAME = "SmartPickupDB";
+const DB_VERSION = 5;
+let db;
 
-  function openDB() {
-    return new Promise((resolve, reject) => {
-      const req = indexedDB.open(DB_NAME, DB_VERSION);
-      req.onupgradeneeded = (e) => {
-        db = e.target.result;
-        if (!db.objectStoreNames.contains("users")) db.createObjectStore("users", { keyPath: "id" });
-        if (!db.objectStoreNames.contains("children")) db.createObjectStore("children", { keyPath: "id" });
-        if (!db.objectStoreNames.contains("classes")) db.createObjectStore("classes", { keyPath: "id" });
-        if (!db.objectStoreNames.contains("sections")) db.createObjectStore("sections", { keyPath: "id" });
-        if (!db.objectStoreNames.contains("links")) db.createObjectStore("links", { keyPath: "id" });
-        if (!db.objectStoreNames.contains("audits")) db.createObjectStore("audits", { keyPath: "id" });
-      };
-      req.onsuccess = (e) => { db = e.target.result; resolve(db); };
-      req.onerror = (e) => reject(e);
-    });
+function openDB() {
+  return new Promise((resolve, reject) => {
+    const request = indexedDB.open(DB_NAME, DB_VERSION);
+
+    request.onerror = (event) => reject("❌ DB open error: " + event.target.errorCode);
+    request.onsuccess = (event) => {
+      db = event.target.result;
+      resolve(db);
+    };
+
+    request.onupgradeneeded = (event) => {
+      db = event.target.result;
+
+      if (!db.objectStoreNames.contains("parents")) {
+        const store = db.createObjectStore("parents", { keyPath: "id" });
+        store.createIndex("name", "name", { unique: false });
+      }
+
+      if (!db.objectStoreNames.contains("children")) {
+        const store = db.createObjectStore("children", { keyPath: "id" });
+        store.createIndex("name", "name", { unique: false });
+      }
+
+      if (!db.objectStoreNames.contains("classes")) {
+        const store = db.createObjectStore("classes", { keyPath: "id" });
+        store.createIndex("className", "className", { unique: false });
+      }
+
+      if (!db.objectStoreNames.contains("sections")) {
+        const store = db.createObjectStore("sections", { keyPath: "id" });
+        store.createIndex("sectionName", "sectionName", { unique: false });
+      }
+
+      if (!db.objectStoreNames.contains("links")) {
+        const store = db.createObjectStore("links", { keyPath: "id" });
+        store.createIndex("parentId", "parentId", { unique: false });
+      }
+
+      if (!db.objectStoreNames.contains("audits")) {
+        const store = db.createObjectStore("audits", { keyPath: "id" });
+        store.createIndex("timestamp", "timestamp", { unique: false });
+      }
+    };
+  });
+}
+
+/* ============================================================
+   PARENT (USER) OPERATIONS
+   ============================================================ */
+
+async function addUser(user) {
+  const dbConn = await openDB();
+  return new Promise((resolve, reject) => {
+    const tx = dbConn.transaction("parents", "readwrite");
+    const store = tx.objectStore("parents");
+    store.add(user);
+    tx.oncomplete = () => resolve(true);
+    tx.onerror = (e) => reject(e);
+  });
+}
+
+async function getAllUsers() {
+  const dbConn = await openDB();
+  return new Promise((resolve, reject) => {
+    const tx = dbConn.transaction("parents", "readonly");
+    const store = tx.objectStore("parents");
+    const request = store.getAll();
+    request.onsuccess = () => resolve(request.result || []);
+    request.onerror = (e) => reject(e);
+  });
+}
+
+/* ============================================================
+   CHILD OPERATIONS
+   ============================================================ */
+
+async function addChild(child) {
+  const dbConn = await openDB();
+  return new Promise((resolve, reject) => {
+    const tx = dbConn.transaction("children", "readwrite");
+    const store = tx.objectStore("children");
+    store.add(child);
+    tx.oncomplete = () => resolve(true);
+    tx.onerror = (e) => reject(e);
+  });
+}
+
+async function getAllChildren() {
+  const dbConn = await openDB();
+  return new Promise((resolve, reject) => {
+    const tx = dbConn.transaction("children", "readonly");
+    const store = tx.objectStore("children");
+    const request = store.getAll();
+    request.onsuccess = () => resolve(request.result || []);
+    request.onerror = (e) => reject(e);
+  });
+}
+
+/* ============================================================
+   CLASS OPERATIONS (no duplicates allowed)
+   ============================================================ */
+
+async function addClassEntry(classObj) {
+  const dbConn = await openDB();
+  const existing = await getAllClasses();
+  const exists = existing.some(
+    (c) => c.className.trim().toLowerCase() === classObj.className.trim().toLowerCase()
+  );
+  if (exists) {
+    alert("⚠️ Class already exists!");
+    return false;
   }
 
-  function tx(storeNames, mode = "readonly") {
-    const stores = Array.isArray(storeNames) ? storeNames : [storeNames];
-    const tx = db.transaction(stores, mode);
-    return tx;
+  return new Promise((resolve, reject) => {
+    const tx = dbConn.transaction("classes", "readwrite");
+    tx.objectStore("classes").add(classObj);
+    tx.oncomplete = () => resolve(true);
+    tx.onerror = (e) => reject(e);
+  });
+}
+
+async function getAllClasses() {
+  const dbConn = await openDB();
+  return new Promise((resolve, reject) => {
+    const tx = dbConn.transaction("classes", "readonly");
+    const store = tx.objectStore("classes");
+    const req = store.getAll();
+    req.onsuccess = () => resolve(req.result || []);
+    req.onerror = (e) => reject(e);
+  });
+}
+
+/* ============================================================
+   SECTION OPERATIONS (no duplicates allowed)
+   ============================================================ */
+
+async function addSectionEntry(sectionObj) {
+  const dbConn = await openDB();
+  const existing = await getAllSections();
+  const exists = existing.some(
+    (s) => s.sectionName.trim().toLowerCase() === sectionObj.sectionName.trim().toLowerCase()
+  );
+  if (exists) {
+    alert("⚠️ Section already exists!");
+    return false;
   }
 
-  function getAll(storeName) {
-    return new Promise((resolve, reject) => {
-      const req = tx(storeName).objectStore(storeName).getAll();
-      req.onsuccess = () => resolve(req.result || []);
-      req.onerror = () => reject(req.error);
-    });
-  }
+  return new Promise((resolve, reject) => {
+    const tx = dbConn.transaction("sections", "readwrite");
+    tx.objectStore("sections").add(sectionObj);
+    tx.oncomplete = () => resolve(true);
+    tx.onerror = (e) => reject(e);
+  });
+}
 
-  function put(storeName, obj) {
-    return new Promise((resolve, reject) => {
-      const store = tx(storeName, "readwrite").objectStore(storeName);
-      const req = store.put(obj);
-      req.onsuccess = () => resolve(req.result);
-      req.onerror = () => reject(req.error);
-    });
-  }
+async function getAllSections() {
+  const dbConn = await openDB();
+  return new Promise((resolve, reject) => {
+    const tx = dbConn.transaction("sections", "readonly");
+    const store = tx.objectStore("sections");
+    const req = store.getAll();
+    req.onsuccess = () => resolve(req.result || []);
+    req.onerror = (e) => reject(e);
+  });
+}
 
-  function del(storeName, key) {
-    return new Promise((resolve, reject) => {
-      const store = tx(storeName, "readwrite").objectStore(storeName);
-      const req = store.delete(key);
-      req.onsuccess = () => resolve(true);
-      req.onerror = () => reject(req.error);
-    });
-  }
+/* ============================================================
+   LINK OPERATIONS
+   ============================================================ */
 
-  /* API functions */
-  async function addUser(u) {
-    u.name = (u.name || "").trim().toLowerCase();
-    // no duplicate by exact name
-    const users = await getAll("users");
-    if (users.some(x => x.name === u.name)) throw new Error("Parent with same name exists");
-    return put("users", u);
-  }
-  async function getAllUsers() { return getAll("users"); }
+async function addLink(linkObj) {
+  const dbConn = await openDB();
+  return new Promise((resolve, reject) => {
+    const tx = dbConn.transaction("links", "readwrite");
+    tx.objectStore("links").add(linkObj);
+    tx.oncomplete = () => resolve(true);
+    tx.onerror = (e) => reject(e);
+  });
+}
 
-  async function addChild(c) {
-    c.name = (c.name || "").trim().toLowerCase();
-    c.class = (c.class || "").trim().toLowerCase();
-    c.section = (c.section || "").trim().toLowerCase();
-    return put("children", c);
-  }
-  async function getAllChildren() { return getAll("children"); }
+async function getAllLinks() {
+  const dbConn = await openDB();
+  return new Promise((resolve, reject) => {
+    const tx = dbConn.transaction("links", "readonly");
+    const store = tx.objectStore("links");
+    const req = store.getAll();
+    req.onsuccess = () => resolve(req.result || []);
+    req.onerror = (e) => reject(e);
+  });
+}
 
-  async function addClassEntry(entry) {
-    entry.className = (entry.className || "").trim().toLowerCase();
-    if (!entry.className) throw new Error("Empty class");
-    const existing = await getAll("classes");
-    if (existing.some(x => x.className === entry.className)) return;
-    return put("classes", entry);
-  }
-  async function getAllClasses() { return getAll("classes"); }
+/* ============================================================
+   AUDIT OPERATIONS
+   ============================================================ */
 
-  async function addSectionEntry(entry) {
-    entry.sectionName = (entry.sectionName || "").trim().toLowerCase();
-    if (!entry.sectionName) throw new Error("Empty section");
-    const existing = await getAll("sections");
-    if (existing.some(x => x.sectionName === entry.sectionName)) return;
-    return put("sections", entry);
-  }
-  async function getAllSections() { return getAll("sections"); }
+async function addAudit(record) {
+  const dbConn = await openDB();
+  return new Promise((resolve, reject) => {
+    const tx = dbConn.transaction("audits", "readwrite");
+    tx.objectStore("audits").add(record);
+    tx.oncomplete = () => resolve(true);
+    tx.onerror = (e) => reject(e);
+  });
+}
 
-  async function addLink(link) {
-    // normalize: children entries should be [{childId, relation}, ...]
-    link.children = Array.isArray(link.children) ? link.children.map(ch => ({ childId: ch.childId, relation: (ch.relation||"guardian").trim().toLowerCase() })) : [];
-    return put("links", link);
-  }
-  async function getAllLinks() { return getAll("links"); }
+async function getLastAudits(limit = 10) {
+  const dbConn = await openDB();
+  return new Promise((resolve, reject) => {
+    const tx = dbConn.transaction("audits", "readonly");
+    const store = tx.objectStore("audits");
+    const req = store.getAll();
+    req.onsuccess = () => {
+      const result = req.result.sort((a, b) => b.timestamp - a.timestamp).slice(0, limit);
+      resolve(result);
+    };
+    req.onerror = (e) => reject(e);
+  });
+}
 
-  async function addAudit(a) {
-    return put("audits", a);
-  }
-  async function getAllAudits() { return getAll("audits"); }
+/* ============================================================
+   EXPOSE FUNCTIONS
+   ============================================================ */
 
-  /* delete helpers */
-  async function deleteClass(id) { return del("classes", id); }
-  async function deleteSection(id) { return del("sections", id); }
-  async function deleteUser(id) { return del("users", id); }
-  async function deleteChild(id) { return del("children", id); }
-  async function deleteLink(id) { return del("links", id); }
+window.dbAPI = {
+  openDB, // ✅ ensure this line exists
+  addUser,
+  getAllUsers,
+  addChild,
+  getAllChildren,
+  addClassEntry,
+  getAllClasses,
+  addSectionEntry,
+  getAllSections,
+  addLink,
+  getAllLinks,
+  addAudit,
+  getLastAudits,
+};
 
-  /* expose */
-  window.dbAPI = {
-    openDB,
-    _getDB: () => db,
-    addUser, getAllUsers,
-    addChild, getAllChildren,
-    addClassEntry, getAllClasses,
-    addSectionEntry, getAllSections,
-    addLink, getAllLinks,
-    addAudit, getAllAudits,
-    deleteClass, deleteSection, deleteUser, deleteChild, deleteLink
-  };
-})();
