@@ -720,7 +720,7 @@ async function loadReports() {
 }
 
 // === CSV DOWNLOAD HANDLER ===
-$("downloadCSV").onclick = () => {
+$("downloadCSV").onclick = async () => {
   const table = document.querySelector("#reportTable");
   if (!table) {
     alert("No report data to download. Please run a report first.");
@@ -792,6 +792,7 @@ document.addEventListener("DOMContentLoaded", async () => {
 window._pickupDebug = {
   startCamera, stopCamera, startDetectionLoop, buildMatcherFromDB, fetchAudits, showRecentAudits
 };
+
 
 
 
