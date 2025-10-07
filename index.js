@@ -542,65 +542,122 @@ async function loadRegisterChild() {
   };
 }
 
+/* ======= Link Parent–Child ======= */
 async function loadLinkParentChild() {
-  currentMode = "link";
-  toggleCameraVisibility(false);
-  stopCamera();
-  // We'll render a search+filters UI (assumes db has getAllUsers/getAllChildren/getAllClasses/getAllSections)
+  $("modeContent").innerHTML = `
+    <h3>Link Parent & Child</h3>
+    <label>Search Parent:</label>
+    <input id="parentSearch" placeholder="type first 3 letters of parent name" />
+    <select id="parentSelect" size="5" style="width:100%;margin-bottom:8px;"></select>
+
+    <div style="display:flex;gap:8px;margin-bottom:8px;">
+      <select id="filterClass"><option value="">All Classes</option></select>
+      <select id="filterSection"><option value="">All Sections</option></select>
+    </div>
+
+    <label>Select Children to Link:</label>
+    <select id="childrenSelect" multiple size="6" style="width:100%;margin-bottom:8px;"></select>
+
+    <div id="relationContainer" style="margin-bottom:10px;"></div>
+
+    <button id="linkBtn">Link Selected</button>
+  `;
+
   const parents = await window.dbAPI.getAllUsers();
   const children = await window.dbAPI.getAllChildren();
   const classes = await window.dbAPI.getAllClasses();
   const sections = await window.dbAPI.getAllSections();
 
-  $("modeContent").innerHTML = `
-    <h3>Link Parent & Child</h3>
-    <div style="max-width:700px;">
-      <div><label>Parent (type first 3 letters)</label><input id="parentSearch" placeholder="type at least 3 letters" /></div>
-      <div><select id="parentSelect" size="6" style="width:100%;"></select></div>
-      <div style="display:flex;gap:8px;margin-top:8px;">
-        <select id="filterClass"><option value="">All Classes</option>${classes.map(c=>`<option>${escapeHtml(c.className)}</option>`).join("")}</select>
-        <select id="filterSection"><option value="">All Sections</option>${sections.map(s=>`<option>${escapeHtml(s.sectionName)}</option>`).join("")}</select>
-      </div>
-      <div style="margin-top:8px;"><select id="childSelect" multiple size="8" style="width:100%;">${children.map(ch => `<option value="${ch.id}">${escapeHtml(ch.name)} (${escapeHtml(ch.class)}-${escapeHtml(ch.section)})</option>`).join("")}</select></div>
-      <div style="margin-top:8px;"><button id="linkBtn">Link Selected</button></div>
-    </div>
-  `;
+  // populate class/section filters
+  $("filterClass").innerHTML += classes
+    .map((c) => `<option value="${c.className}">${c.className}</option>`)
+    .join("");
+  $("filterSection").innerHTML += sections
+    .map((s) => `<option value="${s.sectionName}">${s.sectionName}</option>`)
+    .join("");
 
-  const parentSearchEl = $("parentSearch");
-  const parentSelectEl = $("parentSelect");
-  const classFilterEl = $("filterClass");
-  const sectionFilterEl = $("filterSection");
-  const childSelectEl = $("childSelect");
+  // filter + search logic
+  const parentSearch = $("parentSearch");
+  const parentSelect = $("parentSelect");
+  const childrenSelect = $("childrenSelect");
+  const filterClass = $("filterClass");
+  const filterSection = $("filterSection");
 
-  parentSearchEl.oninput = () => {
-    const term = parentSearchEl.value.trim().toLowerCase();
-    if (term.length < 3) {
-      parentSelectEl.innerHTML = "<option disabled>Type at least 3 letters...</option>";
-      return;
-    }
-    const matches = parents.filter(p => p.name.startsWith(term));
-    parentSelectEl.innerHTML = matches.map(m => `<option value="${m.id}">${escapeHtml(m.name)} (${escapeHtml(m.role)})</option>`).join("") || "<option disabled>No matches</option>";
-  };
-
-  function applyChildFilters() {
-    const cls = classFilterEl.value;
-    const sec = sectionFilterEl.value;
+  function filterChildren() {
+    const cls = filterClass.value;
+    const sec = filterSection.value;
     let list = children;
-    if (cls) list = list.filter(c => c.class === cls);
-    if (sec) list = list.filter(c => c.section === sec);
-    childSelectEl.innerHTML = list.map(c => `<option value="${c.id}">${escapeHtml(c.name)} (${escapeHtml(c.class)}-${escapeHtml(c.section)})</option>`).join("");
+    if (cls) list = list.filter((c) => c.class === cls);
+    if (sec) list = list.filter((c) => c.section === sec);
+    childrenSelect.innerHTML = list
+      .map(
+        (c) =>
+          `<option value="${c.id}">${c.name} (${c.class}-${c.section})</option>`
+      )
+      .join("");
   }
 
-  classFilterEl.onchange = applyChildFilters;
-  sectionFilterEl.onchange = applyChildFilters;
+  filterChildren();
+  filterClass.onchange = filterChildren;
+  filterSection.onchange = filterChildren;
 
+  parentSearch.oninput = () => {
+    const q = parentSearch.value.toLowerCase().trim();
+    if (q.length < 1) return (parentSelect.innerHTML = "");
+    const matches = parents.filter((p) => p.name.startsWith(q));
+    parentSelect.innerHTML = matches
+      .map((p) => `<option value="${p.id}">${p.name}</option>`)
+      .join("");
+  };
+
+  // when children selected, show relation dropdowns
+  childrenSelect.onchange = () => {
+    const selected = Array.from(childrenSelect.selectedOptions);
+    const relationDiv = $("relationContainer");
+    if (!selected.length) return (relationDiv.innerHTML = "");
+
+    relationDiv.innerHTML = `
+      <h4>Assign Relation</h4>
+      ${selected
+        .map(
+          (s) => `
+        <div style="margin-bottom:6px;">
+          <label>${s.textContent}:</label>
+          <select class="relationSelect" data-child="${s.value}">
+            <option value="father">Father</option>
+            <option value="mother">Mother</option>
+            <option value="guardian">Guardian</option>
+          </select>
+        </div>
+      `
+        )
+        .join("")}
+    `;
+  };
+
+  // link button handler
   $("linkBtn").onclick = async () => {
-    const pid = parentSelectEl.value;
-    const kids = Array.from(childSelectEl.selectedOptions).map(o => o.value);
-    if (!pid) return alert("Select parent");
-    if (kids.length === 0) return alert("Select children");
-    await window.dbAPI.addLink({ id: Date.now().toString(), parentId: pid, childrenIds: kids });
-    alert("Linked");
+    const pid = parentSelect.value;
+    if (!pid) return alert("Select a parent first.");
+
+    const selectedChildren = Array.from(childrenSelect.selectedOptions);
+    if (!selectedChildren.length)
+      return alert("Select at least one child to link.");
+
+    const relations = Array.from(
+      document.querySelectorAll(".relationSelect")
+    ).map((sel) => ({
+      childId: sel.dataset.child,
+      relation: sel.value,
+    }));
+
+    await window.dbAPI.addLink({
+      id: Date.now().toString(),
+      parentId: pid,
+      children: relations,
+    });
+
+    alert("✅ Parent linked to children successfully!");
   };
 }
 
@@ -665,4 +722,5 @@ document.addEventListener("DOMContentLoaded", async () => {
 window._pickupDebug = {
   startCamera, stopCamera, startDetectionLoop, buildMatcherFromDB, fetchAudits, showRecentAudits
 };
+
 
