@@ -626,6 +626,98 @@ async function updateStats() {
   } catch (e) { console.warn("updateStats failed", e); }
 }
 
+/* ======= Reports Section ======= */
+async function loadReports() {
+  $("modeContent").innerHTML = `
+    <h3>Audit Reports</h3>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px;">
+      <div>
+        <label>From:</label>
+        <input type="date" id="reportFrom" />
+      </div>
+      <div>
+        <label>To:</label>
+        <input type="date" id="reportTo" />
+      </div>
+      <div>
+        <label>Class:</label>
+        <select id="reportClass"><option value="">All</option></select>
+      </div>
+      <div>
+        <label>Section:</label>
+        <select id="reportSection"><option value="">All</option></select>
+      </div>
+      <div style="align-self:flex-end;">
+        <button id="runReport">Run Report</button>
+      </div>
+    </div>
+    <div id="reportResults" style="max-height:350px;overflow:auto;"></div>
+  `;
+
+  const classes = await window.dbAPI.getAllClasses();
+  const sections = await window.dbAPI.getAllSections();
+
+  $("reportClass").innerHTML += classes
+    .map((c) => `<option value="${c.className}">${c.className}</option>`)
+    .join("");
+  $("reportSection").innerHTML += sections
+    .map((s) => `<option value="${s.sectionName}">${s.sectionName}</option>`)
+    .join("");
+
+  $("runReport").onclick = async () => {
+    const from = $("reportFrom").value ? new Date($("reportFrom").value).getTime() : 0;
+    const to = $("reportTo").value ? new Date($("reportTo").value).getTime() + 86400000 : Date.now();
+    const cls = $("reportClass").value;
+    const sec = $("reportSection").value;
+
+    const audits = await window.dbAPI.getAllAudits();
+
+    const filtered = audits.filter((a) => {
+      const time = a.timestamp || new Date(a.pickupTime).getTime();
+      const matchDate = time >= from && time <= to;
+      const matchClass = !cls || (a.class && a.class === cls);
+      const matchSec = !sec || (a.section && a.section === sec);
+      return matchDate && matchClass && matchSec;
+    });
+
+    if (!filtered.length) {
+      $("reportResults").innerHTML = `<p style="color:#999">No records found for selected filters.</p>`;
+      return;
+    }
+
+    const rows = filtered
+      .map(
+        (r) => `
+      <tr>
+        <td>${r.pickupTime || new Date(r.timestamp).toLocaleString()}</td>
+        <td>${r.parentName || "-"}</td>
+        <td>${r.childName || "-"}</td>
+        <td>${r.class || "-"}</td>
+        <td>${r.section || "-"}</td>
+        <td>${r.relation || "-"}</td>
+      </tr>`
+      )
+      .join("");
+
+    $("reportResults").innerHTML = `
+      <table id="reportTable">
+        <thead>
+          <tr>
+            <th>Date/Time</th>
+            <th>Parent</th>
+            <th>Child</th>
+            <th>Class</th>
+            <th>Section</th>
+            <th>Relation</th>
+          </tr>
+        </thead>
+        <tbody>${rows}</tbody>
+      </table>
+    `;
+  };
+}
+
+
 function setupMenu() {
   const safeBind = (id, fn) => { const el = $(id); if (el) el.onclick = fn; else log("Menu item", id, "missing"); };
   safeBind("btnAdmin", loadRegisterParent);
@@ -633,6 +725,7 @@ function setupMenu() {
   safeBind("btnChild", loadRegisterChild);
   safeBind("btnLink", loadLinkParentChild);
   safeBind("btnRecognition", loadRecognitionMode);
+  safeBind("btnReports", loadReports);
 }
 
 /* -----------------------
@@ -651,6 +744,9 @@ document.addEventListener("DOMContentLoaded", async () => {
     console.warn("dbAPI.openDB not present (will try to use other dbAPI methods).");
   }
 
+
+  
+
   setupMenu();
   await loadFaceModels();
   await populateCameraList();
@@ -665,3 +761,4 @@ document.addEventListener("DOMContentLoaded", async () => {
 window._pickupDebug = {
   startCamera, stopCamera, startDetectionLoop, buildMatcherFromDB, fetchAudits, showRecentAudits
 };
+
