@@ -307,7 +307,7 @@ function startDetectionLoop() {
             ctx.strokeRect(drawBox.x, drawBox.y, drawBox.width, drawBox.height);
           }
           if (resultDiv) resultDiv.innerHTML = `<p style="color:#b91c1c;font-weight:bold;">❌ Unrecognized Face</p>`;
-          playBeep(400, 220, "sine");
+          playBeep(300, 1000, "square");
           return;
         }
 
@@ -346,7 +346,7 @@ function startDetectionLoop() {
           ctx.lineWidth = 3;
           ctx.strokeRect(drawBox.x, drawBox.y, drawBox.width, drawBox.height);
         }
-        playBeep(100, 1000, "square");
+        playBeep(100, 1000, "sine");
 
         // If effectiveNoPickup is true, we do not present the "Mark Pickup" UI — we just continue scanning
         if (effectiveNoPickup) {
@@ -761,4 +761,5 @@ document.addEventListener("DOMContentLoaded", async () => {
 window._pickupDebug = {
   startCamera, stopCamera, startDetectionLoop, buildMatcherFromDB, fetchAudits, showRecentAudits
 };
+
 
