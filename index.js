@@ -70,6 +70,14 @@ async function populateCameraList() {
   sel.onchange = async () => await startCamera(sel.value);
 }
 
+/* ======= COUNTS ======= */
+async function updateCounts() {
+  const parents = await window.dbAPI.getAllUsers();
+  const children = await window.dbAPI.getAllChildren();
+  $("parentCount").textContent = parents.length;
+  $("childCount").textContent = children.length;
+}
+
 /* ======= AUDIO ======= */
 function playBeep(freq, duration, type = "sine") {
   try {
@@ -261,6 +269,7 @@ async function loadRegisterParent() {
     const descriptor = Array.from(lastDetection.descriptor);
     await window.dbAPI.addUser({ id: Date.now().toString(), name, descriptor });
     await buildMatcher();
+    await updateCounts();
     alert("Parent registered successfully!");
   };
 }
@@ -318,6 +327,7 @@ async function loadRegisterChild() {
       class: $("childClass").value,
       section: $("childSection").value,
     });
+    await updateCounts();
     alert("Child registered successfully!");
   };
 }
@@ -416,5 +426,6 @@ document.addEventListener("DOMContentLoaded", async () => {
     console.warn("Matcher skipped:", e);
   }
   setupMenu();
-  toggleCameraVisibility(false); // hide by default
+  await updateCounts();
+  toggleCameraVisibility(false);
 });
