@@ -626,8 +626,9 @@ async function updateStats() {
   } catch (e) { console.warn("updateStats failed", e); }
 }
 
-/* ======= Reports Section ======= */
+/* ======= Reports Section (final stable) ======= */
 async function loadReports() {
+  // 1️⃣ Render HTML first
   $("modeContent").innerHTML = `
     <h3>Audit Reports</h3>
     <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px;">
@@ -655,25 +656,41 @@ async function loadReports() {
     <div id="reportResults" style="max-height:350px;overflow:auto;"></div>
   `;
 
-  // populate dropdowns dynamically AFTER UI is rendered
+  // 2️⃣ Ensure DOM elements exist before accessing
+  await new Promise((r) => setTimeout(r)); // one-tick delay
+
+  const clsSel = $("reportClass");
+  const secSel = $("reportSection");
+  const runBtn = $("runReport");
+  const dlBtn = $("downloadCSV");
+
+  if (!runBtn || !dlBtn) {
+    console.error("⚠️  Report buttons not found in DOM yet.");
+    return;
+  }
+
+  // 3️⃣ Populate dropdowns
   const classes = await window.dbAPI.getAllClasses();
   const sections = await window.dbAPI.getAllSections();
-
-  $("reportClass").innerHTML += classes
+  clsSel.innerHTML += classes
     .map((c) => `<option value="${c.className}">${c.className}</option>`)
     .join("");
-  $("reportSection").innerHTML += sections
+  secSel.innerHTML += sections
     .map((s) => `<option value="${s.sectionName}">${s.sectionName}</option>`)
     .join("");
 
-  // attach handlers only AFTER elements exist
-  $("runReport").onclick = async () => {
-    const from = $("reportFrom").value ? new Date($("reportFrom").value).getTime() : 0;
-    const to = $("reportTo").value ? new Date($("reportTo").value).getTime() + 86400000 : Date.now();
-    const cls = $("reportClass").value;
-    const sec = $("reportSection").value;
+  // 4️⃣ Run report handler
+  runBtn.onclick = async () => {
+    const from = $("reportFrom").value
+      ? new Date($("reportFrom").value).getTime()
+      : 0;
+    const to = $("reportTo").value
+      ? new Date($("reportTo").value).getTime() + 86400000
+      : Date.now();
+    const cls = clsSel.value;
+    const sec = secSel.value;
 
-    const audits = await window.dbAPI.getAllAudits();
+    const audits = (await window.dbAPI.getAllAudits()) || [];
 
     const filtered = audits.filter((a) => {
       const time = a.timestamp || new Date(a.pickupTime).getTime();
@@ -684,7 +701,8 @@ async function loadReports() {
     });
 
     if (!filtered.length) {
-      $("reportResults").innerHTML = `<p style="color:#999">No records found for selected filters.</p>`;
+      $("reportResults").innerHTML =
+        `<p style="color:#999">No records found.</p>`;
       return;
     }
 
@@ -716,36 +734,33 @@ async function loadReports() {
         </thead>
         <tbody>${rows}</tbody>
       </table>
+      <p style="font-size:0.9rem;color:#555;margin-top:4px;">
+        Showing ${filtered.length} record(s)
+      </p>
     `;
   };
 
-  // ✅ attach after Run Report (inside loadReports)
-  $("downloadCSV").onclick = () => {
+  // 5️⃣ Download CSV handler
+  dlBtn.onclick = () => {
     const table = document.querySelector("#reportTable");
     if (!table) {
       alert("No report data to download. Please run a report first.");
       return;
     }
-
-    const rows = [];
-    const trs = table.querySelectorAll("tr");
-    trs.forEach((tr) => {
-      const cells = Array.from(tr.children).map((td) =>
-        `"${td.textContent.replace(/"/g, '""')}"`
-      );
-      rows.push(cells.join(","));
+    const lines = Array.from(table.querySelectorAll("tr")).map((tr) =>
+      Array.from(tr.children)
+        .map((td) => `"${td.textContent.replace(/"/g, '""')}"`)
+        .join(",")
+    );
+    const blob = new Blob([lines.join("\n")], {
+      type: "text/csv;charset=utf-8;",
     });
-
-    const csvContent = rows.join("\n");
-    const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
-
     const today = new Date().toISOString().split("T")[0];
     a.href = url;
     a.download = `pickup_report_${today}.csv`;
     a.click();
-
     URL.revokeObjectURL(url);
   };
 }
@@ -793,6 +808,7 @@ document.addEventListener("DOMContentLoaded", async () => {
 window._pickupDebug = {
   startCamera, stopCamera, startDetectionLoop, buildMatcherFromDB, fetchAudits, showRecentAudits
 };
+
 
 
 
