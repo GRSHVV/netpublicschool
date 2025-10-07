@@ -1,17 +1,18 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8" />
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
   <title>Face Recognition Pickup System</title>
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <link rel="stylesheet" href="style.css" />
+  <!-- face-api script must be present at this path -->
   <script defer src="face-api.min.js"></script>
   <script defer src="db.js"></script>
   <script defer src="index.js"></script>
 </head>
 <body>
   <div id="container">
-    <!-- Left: camera + main panel -->
+    <!-- LEFT: main area (camera + content) -->
     <section id="mainPanel">
       <div id="topPanel">
         <video id="video" autoplay muted playsinline></video>
@@ -22,11 +23,12 @@
       </div>
     </section>
 
-    <!-- Right: control/menu panel -->
+    <!-- RIGHT: menu -->
     <aside id="sideMenu">
       <h2>Pickup Admin Panel</h2>
+
       <button id="btnAdmin">👤 Register Parent</button>
-      <button id="btnClass">🏫 Manage Classes & Sections</button>
+      <button id="btnClass">🏷 Manage Classes & Sections</button>
       <button id="btnChild">👶 Register Child</button>
       <button id="btnLink">🔗 Link Parent–Child</button>
       <button id="btnRecognition">🎥 Recognition Mode</button>
@@ -34,15 +36,16 @@
       <hr />
 
       <div class="statusBox">
-        <p>👪 Parents: <span id="parentCount">0</span></p>
-        <p>🧒 Children: <span id="childCount">0</span></p>
+        <div>👪 Parents: <span id="parentCount">0</span></div>
+        <div>🧒 Children: <span id="childCount">0</span></div>
       </div>
 
-      <label for="cameraSelect">📸 Camera:</label>
+      <label for="cameraSelect">📸 Camera</label>
       <select id="cameraSelect"></select>
 
-      <label>
-        <input type="checkbox" id="noPickupMode" /> Continuous Recognition
+      <label class="checkboxLabel">
+        <input type="checkbox" id="noPickupMode" />
+        Continuous Recognition
       </label>
 
       <div id="statusMsg">Ready</div>

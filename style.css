@@ -1,169 +1,158 @@
-:root {
-  --menu-bg: #e2e8f0;
-  --menu-text: #1e293b;
-  --primary: #2563eb;
-  --accent: #3b82f6;
-  --panel-bg: #f8fafc;
+:root{
+  --bg: #f8fafc;
+  --menu-bg: #ffffff;
+  --accent: #2563eb;
+  --muted: #6b7280;
+  --card-border: #e6eefc;
 }
 
+* { box-sizing: border-box; }
 body {
   margin: 0;
-  font-family: "Segoe UI", Roboto, sans-serif;
-  background: var(--panel-bg);
+  font-family: Inter, "Segoe UI", Roboto, Arial, sans-serif;
+  background: var(--bg);
   color: #111827;
-  display: flex;
-  justify-content: center;
-  align-items: stretch;
   height: 100vh;
   overflow: hidden;
 }
 
+/* Layout: left main (70%), right menu (30%) */
 #container {
   display: flex;
-  flex-direction: row;
+  height: 100vh;
   width: 100%;
-  height: 100%;
 }
 
-/* ======= RIGHT MENU ======= */
-#sideMenu {
-  width: 30%;
-  min-width: 280px;
-  background: var(--menu-bg);
-  color: var(--menu-text);
-  padding: 15px;
-  display: flex;
-  flex-direction: column;
-  box-shadow: -2px 0 5px rgba(0, 0, 0, 0.1);
-  overflow-y: auto;
-}
-
-#sideMenu h2 {
-  text-align: center;
-  margin-bottom: 12px;
-  font-size: 1.3rem;
-}
-
-#sideMenu button {
-  background: var(--primary);
-  color: white;
-  border: none;
-  border-radius: 6px;
-  padding: 10px;
-  margin-bottom: 8px;
-  cursor: pointer;
-  transition: background 0.3s ease;
-}
-
-#sideMenu button:hover {
-  background: var(--accent);
-}
-
-#sideMenu select,
-#sideMenu input[type="checkbox"] {
-  margin-top: 5px;
-  width: 100%;
-  font-size: 1rem;
-}
-
-#statusMsg {
-  margin-top: auto;
-  font-size: 0.9rem;
-  text-align: center;
-  opacity: 0.7;
-}
-
-.statusBox {
-  background: white;
-  border-radius: 6px;
-  padding: 8px;
-  margin-bottom: 12px;
-  border: 1px solid #cbd5e1;
-}
-
-.statusBox p {
-  margin: 4px 0;
-  font-weight: 500;
-}
-
-/* ======= LEFT MAIN PANEL ======= */
 #mainPanel {
   flex: 1;
   display: flex;
   flex-direction: column;
-  background: var(--panel-bg);
-  padding: 8px;
-  overflow: hidden;
+  padding: 10px;
+  gap: 8px;
 }
 
 #topPanel {
   flex: 0.6;
   background: #000;
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  position: relative;
   border-radius: 8px;
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
   overflow: hidden;
 }
 
 #bottomPanel {
   flex: 0.4;
-  background: #f1f5f9;
+  background: #fff;
   border-radius: 8px;
-  margin-top: 8px;
   padding: 10px;
   overflow-y: auto;
-  font-size: 1rem;
+  border: 1px solid var(--card-border);
 }
 
-#video,
-#overlay {
+/* video and overlay fill topPanel */
+#video, #overlay {
   position: absolute;
   width: 100%;
-  height: auto;
-  border-radius: 8px;
+  height: 100%;
+  object-fit: cover;
 }
 
-/* ======= FORMS ======= */
-#modeContent {
+/* Right menu */
+#sideMenu {
+  width: 320px;
+  min-width: 260px;
+  background: var(--menu-bg);
+  border-left: 1px solid var(--card-border);
+  padding: 14px;
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: 8px;
 }
 
-#modeContent input,
-#modeContent select,
-#modeContent button {
-  font-size: 1rem;
-  padding: 6px;
-  border-radius: 6px;
-  border: 1px solid #cbd5e1;
+#sideMenu h2 {
+  margin: 0;
+  text-align: center;
+  font-size: 1.1rem;
 }
 
-#modeContent button {
-  background: var(--primary);
-  color: white;
-  border: none;
-}
-
-#modeContent button:hover {
+#sideMenu button {
   background: var(--accent);
+  color: #fff;
+  border: none;
+  padding: 10px;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 0.95rem;
 }
 
-/* ======= RESPONSIVE ======= */
+#sideMenu button:hover { opacity: 0.95; }
+
+.statusBox {
+  background: #f1f5f9;
+  border-radius: 6px;
+  padding: 8px;
+  border: 1px solid var(--card-border);
+  font-weight: 600;
+  color: var(--muted);
+}
+
+/* selects, inputs */
+#sideMenu select, #sideMenu input[type="text"], #sideMenu input[type="search"] {
+  width: 100%;
+  padding: 8px;
+  border-radius: 6px;
+  border: 1px solid #e6eefc;
+  margin-bottom: 6px;
+}
+
+.checkboxLabel {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.95rem;
+  color: var(--muted);
+}
+
+#statusMsg {
+  margin-top: auto;
+  color: var(--muted);
+  font-size: 0.9rem;
+  text-align: center;
+}
+
+/* content forms */
+#modeContent h3 { margin-top: 0; }
+#modeContent input, #modeContent select, #modeContent button {
+  padding: 8px;
+  border-radius: 6px;
+  border: 1px solid #e6eefc;
+  width: 100%;
+}
+#modeContent button {
+  background: var(--accent);
+  color: white;
+  border: 0;
+  cursor: pointer;
+}
+
+/* lists (classes/sections) */
+#modeContent ul { padding-left: 18px; margin: 6px 0; }
+#modeContent li { margin: 6px 0; display:flex; align-items:center; justify-content:space-between; gap:8px; }
+
+.deleteBtn {
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  color: #ef4444;
+  font-size: 1rem;
+}
+
+/* responsive: mobile stack menu on top */
 @media (max-width: 900px) {
-  #container {
-    flex-direction: column;
-  }
-  #sideMenu {
-    width: 100%;
-    min-width: unset;
-    flex-direction: row;
-    flex-wrap: wrap;
-    justify-content: center;
-  }
-  #mainPanel {
-    flex: 1;
-  }
+  #container { flex-direction: column; }
+  #sideMenu { width: 100%; min-width: unset; order: 2; flex-direction: row; flex-wrap: wrap; gap:6px; align-items:center; justify-content:center; }
+  #mainPanel { order: 1; padding: 8px; }
+  #topPanel { height: 48vh; }
 }
