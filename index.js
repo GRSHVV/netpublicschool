@@ -18,6 +18,7 @@ async function loadModels() {
     await Promise.all([
       faceapi.nets.tinyFaceDetector.loadFromUri("./models"),
       faceapi.nets.faceLandmark68Net.loadFromUri("./models"),
+      faceapi.nets.faceLandmark68Net.loadFromUri("./models"),
       faceapi.nets.faceRecognitionNet.loadFromUri("./models"),
     ]);
     modelsLoaded = true;
@@ -274,158 +275,69 @@ async function loadRegisterParent() {
   };
 }
 
+/* ======= CLASSES + SECTIONS ======= */
 async function loadClassSection() {
   currentMode = "class";
   toggleCameraVisibility(false);
   $("modeContent").innerHTML = `
     <h3>Manage Classes & Sections</h3>
     <div>
-      <input id="className" placeholder="Class" />
+      <input id="className" placeholder="Add new class" />
       <button id="addClass">Add Class</button>
       <ul id="classList"></ul>
-      <input id="sectionName" placeholder="Section" />
+
+      <input id="sectionName" placeholder="Add new section" />
       <button id="addSection">Add Section</button>
       <ul id="sectionList"></ul>
     </div>
   `;
-  const render = async () => {
-    const c = await window.dbAPI.getAllClasses();
-    const s = await window.dbAPI.getAllSections();
-    $("classList").innerHTML = c.map((x) => `<li>${x.className}</li>`).join("");
-    $("sectionList").innerHTML = s.map((x) => `<li>${x.sectionName}</li>`).join("");
-  };
+
+  async function render() {
+    const classes = await window.dbAPI.getAllClasses();
+    const sections = await window.dbAPI.getAllSections();
+
+    $("classList").innerHTML = classes
+      .map(
+        (x) =>
+          `<li>${x.className} 
+          <button class="delBtn" data-type="class" data-id="${x.id}">🗑</button></li>`
+      )
+      .join("");
+
+    $("sectionList").innerHTML = sections
+      .map(
+        (x) =>
+          `<li>${x.sectionName} 
+          <button class="delBtn" data-type="section" data-id="${x.id}">🗑</button></li>`
+      )
+      .join("");
+
+    document.querySelectorAll(".delBtn").forEach((btn) =>
+      btn.addEventListener("click", async () => {
+        const type = btn.dataset.type;
+        const id = btn.dataset.id;
+        if (!confirm("Delete this entry?")) return;
+        const store = type === "class" ? "classes" : "sections";
+        const tx = db.transaction(store, "readwrite");
+        tx.objectStore(store).delete(id);
+        tx.oncomplete = render;
+      })
+    );
+  }
+
   $("addClass").onclick = async () => {
-    await window.dbAPI.addClassEntry({ id: Date.now().toString(), className: $("className").value });
+    const val = $("className").value.trim().toLowerCase();
+    if (!val) return alert("Enter class name");
+    await window.dbAPI.addClassEntry({ id: Date.now().toString(), className: val });
     render();
   };
+
   $("addSection").onclick = async () => {
-    await window.dbAPI.addSectionEntry({
-      id: Date.now().toString(),
-      sectionName: $("sectionName").value,
-    });
+    const val = $("sectionName").value.trim().toLowerCase();
+    if (!val) return alert("Enter section name");
+    await window.dbAPI.addSectionEntry({ id: Date.now().toString(), sectionName: val });
     render();
   };
+
   render();
 }
-
-async function loadRegisterChild() {
-  currentMode = "child";
-  toggleCameraVisibility(false);
-  const classes = await window.dbAPI.getAllClasses();
-  const sections = await window.dbAPI.getAllSections();
-  $("modeContent").innerHTML = `
-    <h3>Register Child</h3>
-    <input id="childName" placeholder="Child name" />
-    <select id="childClass">${classes.map((c) => `<option>${c.className}</option>`).join("")}</select>
-    <select id="childSection">${sections.map((s) => `<option>${s.sectionName}</option>`).join("")}</select>
-    <button id="addChild">Register</button>
-  `;
-  $("addChild").onclick = async () => {
-    await window.dbAPI.addChild({
-      id: Date.now().toString(),
-      name: $("childName").value.trim().toLowerCase(),
-      class: $("childClass").value,
-      section: $("childSection").value,
-    });
-    await updateCounts();
-    alert("Child registered successfully!");
-  };
-}
-
-async function loadLinkParentChild() {
-  currentMode = "link";
-  toggleCameraVisibility(false);
-  const parents = await window.dbAPI.getAllUsers();
-  const children = await window.dbAPI.getAllChildren();
-  const classes = await window.dbAPI.getAllClasses();
-  const sections = await window.dbAPI.getAllSections();
-
-  $("modeContent").innerHTML = `
-    <h3>Link Parent & Child</h3>
-    <input id="parentSearch" placeholder="Search parent" />
-    <select id="parentSelect" size="5"></select>
-    <select id="classFilter"><option value="">All Classes</option>${classes
-      .map((c) => `<option>${c.className}</option>`)
-      .join("")}</select>
-    <select id="sectionFilter"><option value="">All Sections</option>${sections
-      .map((s) => `<option>${s.sectionName}</option>`)
-      .join("")}</select>
-    <select id="childSelect" multiple size="6" style="width:100%;"></select>
-    <select id="relationSelect">
-      <option value="father">Father</option>
-      <option value="mother">Mother</option>
-      <option value="guardian">Guardian</option>
-    </select>
-    <button id="linkBtn">Link</button>
-  `;
-
-  const parentSelect = $("parentSelect");
-  $("parentSearch").oninput = () => {
-    const val = $("parentSearch").value.toLowerCase();
-    const list = parents.filter((p) => p.name.startsWith(val));
-    parentSelect.innerHTML = list.map((p) => `<option value="${p.id}">${p.name}</option>`).join("");
-  };
-
-  const childSelect = $("childSelect");
-  function renderChildren() {
-    let list = children;
-    const cf = $("classFilter").value;
-    const sf = $("sectionFilter").value;
-    if (cf) list = list.filter((c) => c.class === cf);
-    if (sf) list = list.filter((c) => c.section === sf);
-    childSelect.innerHTML = list
-      .map((c) => `<option value="${c.id}">${c.name} (${c.class}-${c.section})</option>`)
-      .join("");
-  }
-  $("classFilter").onchange = renderChildren;
-  $("sectionFilter").onchange = renderChildren;
-  renderChildren();
-
-  $("linkBtn").onclick = async () => {
-    const pid = parentSelect.value;
-    const kids = Array.from(childSelect.selectedOptions).map((o) => o.value);
-    const rel = $("relationSelect").value;
-    if (!pid || kids.length === 0) return alert("Select parent & children");
-    await window.dbAPI.addLink({
-      id: Date.now().toString(),
-      parentId: pid,
-      children: kids.map((id) => ({ childId: id, relation: rel })),
-    });
-    alert("Linked successfully");
-  };
-}
-
-async function loadRecognition() {
-  currentMode = "recognition";
-  $("modeContent").innerHTML = `<h3>Recognition Mode Active</h3>`;
-  toggleCameraVisibility(true);
-  await startCamera();
-  startDetectionLoop();
-}
-
-/* ======= MENU SETUP ======= */
-function setupMenu() {
-  $("btnAdmin").onclick = loadRegisterParent;
-  $("btnClass").onclick = loadClassSection;
-  $("btnChild").onclick = loadRegisterChild;
-  $("btnLink").onclick = loadLinkParentChild;
-  $("btnRecognition").onclick = loadRecognition;
-}
-
-/* ======= INIT ======= */
-document.addEventListener("DOMContentLoaded", async () => {
-  video = $("video");
-  overlay = $("overlay");
-  ctx = overlay.getContext("2d");
-  await window.dbAPI.openDB();
-  await loadModels();
-  await populateCameraList();
-  try {
-    await buildMatcher();
-  } catch (e) {
-    console.warn("Matcher skipped:", e);
-  }
-  setupMenu();
-  await updateCounts();
-  toggleCameraVisibility(false);
-});
