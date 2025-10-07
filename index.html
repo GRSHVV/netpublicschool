@@ -2,81 +2,44 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Smart Pickup System</title>
+  <title>Face Recognition Pickup System</title>
   <link rel="stylesheet" href="style.css" />
-  <link rel="manifest" href="./manifest.json" />
-  <meta name="theme-color" content="#166534" />
-  <script defer src="./face-api.min.js"></script>
-  <script defer src="./db.js"></script>
-  <script defer src="./index.js"></script>
+  <script defer src="face-api.min.js"></script>
+  <script defer src="db.js"></script>
+  <script defer src="index.js"></script>
 </head>
-
 <body>
-  <div id="appContainer">
-    <!-- LEFT MENU PANEL -->
-    <div id="menuPanel">
-      <h2>Smart Pickup</h2>
-
+  <div id="app">
+    <aside id="menu">
+      <h2>Menu</h2>
       <button id="btnAdmin">Register Parent</button>
+      <button id="btnClass">Manage Classes & Sections</button>
       <button id="btnChild">Register Child</button>
-      <button id="btnClass">Manage Classes</button>
-      <button id="btnLink">Link Parent & Child</button>
-      <button id="btnRecognition">Recognition</button>
-
-      <!-- COUNTS + CAMERA SELECTOR BELOW MENU -->
-      <div id="menuStatsArea">
-        <div id="statsHeader">
-          <div><strong>👨 Parents:</strong> <span id="parentCount">0</span></div>
-          <div><strong>👧 Children:</strong> <span id="childCount">0</span></div>
-          <!-- <button id="refreshStatsBtn" title="Refresh Counts">🔄</button>-->
-        </div>
-
-        <div id="cameraSelectorContainer">
-          <label for="cameraSelect">Camera</label>
-          <select id="cameraSelect"></select>
-        </div>
-	<hr />
-	<label style="font-size:0.9rem;">
-  	<input type="checkbox" id="noPickupMode" />
-  	Continuous Recognition (No Pickup)
-	</label>
-	
+      <button id="btnLink">Link Parent–Child</button>
+      <button id="btnRecognition">Recognition Mode</button>
+      <hr />
+      <div id="counts">
+        Parents: <span id="parentCount">0</span><br />
+        Children: <span id="childCount">0</span>
       </div>
-    </div>
+      <label style="margin-top:10px;">Camera</label>
+      <select id="cameraSelect"></select>
+      <label style="margin-top:10px;">
+        <input type="checkbox" id="noPickupMode" />
+        Continuous Recognition
+      </label>
+      <div id="statusMsg">Initializing...</div>
+    </aside>
 
-    <!-- MAIN PANEL -->
-    <div id="mainPanel">
-      <div id="topPanel">
-        <!-- SMALL CAMERA AREA -->
-        <div id="cameraArea">
-          <video id="video" autoplay muted playsinline></video>
-          <canvas id="overlay"></canvas>
-        </div>
-
-        <!-- BIGGER FORM AREA -->
-        <div id="modeContent">
-          <!-- Dynamic mode content -->
-        </div>
+    <main id="main">
+      <div id="top-panel">
+        <video id="video" autoplay muted playsinline></video>
+        <canvas id="overlay"></canvas>
       </div>
-
-      <!-- BOTTOM AUDIT / STATUS AREA -->
-      <div id="bottomPanel">
-        <div id="statusMsg">Initializing...</div>
-        <div id="recognitionResult" class="result-box"></div>
+      <div id="bottom-panel">
+        <div id="modeContent">Select an option from the menu.</div>
       </div>
-    </div>
+    </main>
   </div>
-
-  <!-- PWA Service Worker Registration -->
-  <script>
-    if ('serviceWorker' in navigator) {
-      window.addEventListener('load', function() {
-        navigator.serviceWorker.register('./service-worker.js')
-          .then(reg => console.log('✅ Service worker registered:', reg))
-          .catch(err => console.error('❌ Service worker registration failed:', err));
-      });
-    }
-  </script>
 </body>
 </html>
