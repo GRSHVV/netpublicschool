@@ -1,91 +1,94 @@
+/* ============================================================
+  Full index.js — Final (fixes audit display + continuous flow)
+  - Requirements:
+    * `face-api.min.js` loaded before this file
+    * `./models` folder served
+    * `db.js` exposing window.dbAPI with expected methods (openDB/addUser/getAllUsers/addChild/getAllChildren/addClassEntry/getAllClasses/addSectionEntry/getAllSections/addLink/getAllLinks/addAudit/getLastAudits/getAllAudits) — code will try fallbacks
+    * index.html includes elements with IDs used below
+  ============================================================ */
+
 "use strict";
 
-/* ============================================================
-   Smart Pickup App - Final Version with Conditional Camera View
-   ============================================================ */
-
+/* -----------------------
+   Globals
+   ----------------------- */
 let video, overlay, ctx;
 let modelsLoaded = false;
-let detectionLoop = null;
-let currentMode = "none";
-let currentCameraId = null;
-let allVideoDevices = [];
+let detectionInterval = null;
+let currentMode = "none"; // "registerParent","registerChild","classManager","link","recognition"
 let recognitionMatcher = null;
 let lastDetection = null;
+let tempNoPickup = false; // temporary no-pickup after marking
+let recognitionPaused = false; // pause detection while operator marks pickup
 
-/* ============================================================
-   Helpers
-   ============================================================ */
+/* -----------------------
+   DOM helpers
+   ----------------------- */
 const $ = (id) => document.getElementById(id);
-const log = (...a) => console.log("[LOG]", ...a);
-const setStatus = (msg) => { if ($("statusMsg")) $("statusMsg").textContent = msg; };
-const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+const log = (...args) => console.log("[APP]", ...args);
+function setStatus(msg) { const e = $("statusMsg"); if (e) e.textContent = msg; }
 
+/* -----------------------
+   Audio helper
+   ----------------------- */
 function playBeep(durationMs = 120, freq = 1000, type = "sine") {
   try {
     const ctx = new (window.AudioContext || window.webkitAudioContext)();
-    const osc = ctx.createOscillator();
-    const gain = ctx.createGain();
-    osc.type = type;
-    osc.frequency.value = freq;
-    osc.connect(gain);
-    gain.connect(ctx.destination);
-    gain.gain.value = 0.05;
-    osc.start();
+    const o = ctx.createOscillator();
+    const g = ctx.createGain();
+    o.type = type;
+    o.frequency.value = freq;
+    o.connect(g);
+    g.connect(ctx.destination);
+    g.gain.value = 0.001;
+    o.start();
+    g.gain.linearRampToValueAtTime(0.2, ctx.currentTime + 0.02);
     setTimeout(() => {
-      osc.stop();
-      ctx.close();
+      g.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime + 0.03);
+      setTimeout(() => { o.stop(); ctx.close(); }, 60);
     }, durationMs);
-  } catch (e) {
-    console.warn("Audio not supported", e);
-  }
+  } catch (e) { /* ignore */ }
 }
 
-/* ============================================================
-   Face API Model Loading
-   ============================================================ */
+/* -----------------------
+   Model loading
+   ----------------------- */
 async function loadFaceModels() {
   try {
-    setStatus("Loading AI models...");
+    setStatus("Loading face models...");
     await Promise.all([
       faceapi.nets.tinyFaceDetector.loadFromUri("./models"),
       faceapi.nets.faceLandmark68Net.loadFromUri("./models"),
       faceapi.nets.faceRecognitionNet.loadFromUri("./models"),
     ]);
     modelsLoaded = true;
-    setStatus("✅ Models loaded.");
-  } catch (e) {
-    console.error("Model load error:", e);
-    alert("❌ Failed to load models. Check ./models folder and paths.");
+    setStatus("Models loaded.");
+    log("Face models ready");
+  } catch (err) {
+    console.error("Model load failed:", err);
+    alert("Failed to load face models. Check ./models paths and network.");
   }
 }
 
-/* ============================================================
-   Camera Handling
-   ============================================================ */
+/* -----------------------
+   Camera utils
+   ----------------------- */
 async function populateCameraList() {
   try {
     const devices = await navigator.mediaDevices.enumerateDevices();
-    allVideoDevices = devices.filter((d) => d.kind === "videoinput");
-
-    const select = $("cameraSelect");
-    if (!select) return;
-    select.innerHTML = "";
-
-    allVideoDevices.forEach((dev, i) => {
+    const cams = devices.filter(d => d.kind === "videoinput");
+    const sel = $("cameraSelect");
+    if (!sel) return;
+    sel.innerHTML = "";
+    cams.forEach((c, i) => {
       const opt = document.createElement("option");
-      opt.value = dev.deviceId;
-      opt.textContent = dev.label || `Camera ${i + 1}`;
-      select.appendChild(opt);
+      opt.value = c.deviceId;
+      opt.textContent = c.label || `Camera ${i+1}`;
+      sel.appendChild(opt);
     });
-
-    select.onchange = async () => await startCamera(select.value);
-    if (allVideoDevices.length > 0 && !currentCameraId) {
-      currentCameraId = allVideoDevices[0].deviceId;
-      select.value = currentCameraId;
-    }
+    sel.onchange = async () => { await startCamera(sel.value); };
   } catch (e) {
-    console.error("Camera list error:", e);
+    console.warn("populateCameraList failed", e);
   }
 }
 
@@ -94,77 +97,185 @@ async function startCamera(deviceId = null) {
     stopCamera();
     const constraints = deviceId
       ? { video: { deviceId: { ideal: deviceId } } }
-      : { video: { facingMode: { ideal: "environment" } } };
+      : { video: { facingMode: { ideal: "environment" }, width: { ideal: 1280 } } };
 
     const stream = await navigator.mediaDevices.getUserMedia(constraints);
     video.srcObject = stream;
     await video.play();
 
+    // size overlay to displayed video
     overlay.width = video.videoWidth;
     overlay.height = video.videoHeight;
 
     if (modelsLoaded) startDetectionLoop();
-    setStatus("📷 Camera Active");
-  } catch (e) {
-    console.error("Camera error:", e);
-    alert("❌ Camera permission denied or unavailable.");
+    setStatus("Camera active");
+  } catch (err) {
+    console.error("startCamera error", err);
+    setStatus("Camera error: " + (err.message || err.name));
+    alert("Camera access failed. Ensure permission and HTTPS.");
   }
 }
 
 function stopCamera() {
-  clearInterval(detectionLoop);
-  if (video?.srcObject) {
-    video.srcObject.getTracks().forEach((t) => t.stop());
+  if (detectionInterval) {
+    clearInterval(detectionInterval);
+    detectionInterval = null;
+  }
+  if (video && video.srcObject) {
+    video.srcObject.getTracks().forEach(t => t.stop());
     video.srcObject = null;
   }
-  ctx?.clearRect(0, 0, overlay.width, overlay.height);
-  setStatus("Camera stopped");
+  if (ctx && overlay) ctx.clearRect(0, 0, overlay.width, overlay.height);
 }
 
-/* ============================================================
-   Face Detection & Recognition (3 Colors)
-   ============================================================ */
-/* ============================================================
-   Face Detection & Recognition (with Relation & Multi-Pickup)
-   ============================================================ */
-/* ============================================================
-   Face Detection & Recognition (Pauses Until Pickup Marked)
-   ============================================================ */
-async function startDetectionLoop() {
-  if (!modelsLoaded) return;
-  clearInterval(detectionLoop);
+/* -----------------------
+   DB helpers for audits (robust)
+   ----------------------- */
+async function fetchAudits(limit = 10) {
+  // Try DB API methods first
+  try {
+    if (window.dbAPI && typeof window.dbAPI.getLastAudits === "function") {
+      const res = await window.dbAPI.getLastAudits(limit);
+      if (Array.isArray(res)) return res;
+    }
+  } catch (e) { console.warn("getLastAudits failed", e); }
 
-  const options = new faceapi.TinyFaceDetectorOptions({
-    inputSize: 224,
-    scoreThreshold: 0.4,
-  });
+  try {
+    if (window.dbAPI && typeof window.dbAPI.getAllAudits === "function") {
+      const all = await window.dbAPI.getAllAudits();
+      if (Array.isArray(all)) {
+        // sort desc by timestamp if available
+        all.sort((a,b) => (b.timestamp || 0) - (a.timestamp || 0));
+        return all.slice(0, limit);
+      }
+    }
+  } catch (e) { console.warn("getAllAudits failed", e); }
 
-  let loopPaused = false;
+  // Fallback: try to open DB and read 'audits' object store
+  try {
+    if (window.dbAPI && typeof window.dbAPI.openDB === "function") {
+      const db = await window.dbAPI.openDB();
+      if (db && db.transaction) {
+        const tx = db.transaction("audits", "readonly");
+        const store = tx.objectStore("audits");
+        const req = store.getAll();
+        const result = await new Promise((resolve, reject) => {
+          req.onsuccess = () => resolve(req.result);
+          req.onerror = () => reject(req.error);
+        });
+        if (Array.isArray(result)) {
+          result.sort((a,b) => (b.timestamp || 0) - (a.timestamp || 0));
+          return result.slice(0, limit);
+        }
+      }
+    }
+  } catch (e) {
+    console.warn("Fallback DB read failed:", e);
+  }
 
-  detectionLoop = setInterval(async () => {
+  return [];
+}
+
+async function showRecentAudits() {
+  try {
+    const recs = await fetchAudits(10);
+    const container = $("recentAudits");
+    if (!container) return;
+    if (!recs || recs.length === 0) {
+      container.innerHTML = "<em>No pickup records yet.</em>";
+      return;
+    }
+    const html = recs.map(r => {
+      // Support multiple field name shapes (some implementations store parentId/childId instead)
+      const time = r.pickupTime || (r.timestamp ? new Date(r.timestamp).toLocaleString() : "");
+      const parent = r.parentName || r.parentId || "parent";
+      const rel = r.relation || "";
+      const child = r.childName || r.childId || "child";
+      const cls = r.class || r.className || "";
+      const sec = r.section || r.sectionName || "";
+      return `<div style="padding:4px 0;border-bottom:1px solid rgba(0,0,0,0.05);">🕒 ${time} — <strong>${escapeHtml(parent)}</strong> ${rel?`(${escapeHtml(rel)}) `:""}picked up <strong>${escapeHtml(child)}</strong> [${escapeHtml(cls)}-${escapeHtml(sec)}]</div>`;
+    }).join("");
+    container.innerHTML = html;
+  } catch (e) {
+    console.error("showRecentAudits failed", e);
+  }
+}
+
+/* small escape */
+function escapeHtml(s) {
+  if (!s) return "";
+  return String(s).replace(/[&<>"']/g, m => ({ "&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[m]));
+}
+
+/* -----------------------
+   Build recognition matcher from DB
+   ----------------------- */
+async function buildMatcherFromDB() {
+  try {
+    if (!window.dbAPI || typeof window.dbAPI.getAllUsers !== "function") {
+      recognitionMatcher = null;
+      return;
+    }
+    const users = await window.dbAPI.getAllUsers();
+    const labeled = [];
+    for (const u of users) {
+      if (u.descriptor && Array.isArray(u.descriptor) && u.descriptor.length >= 64) {
+        labeled.push(new faceapi.LabeledFaceDescriptors(u.name, [new Float32Array(u.descriptor)]));
+      }
+    }
+    recognitionMatcher = labeled.length ? new faceapi.FaceMatcher(labeled, 0.55) : null;
+    log("Matcher built with", labeled.length, "labels");
+  } catch (e) {
+    console.error("buildMatcherFromDB error", e);
+  }
+}
+
+/* -----------------------
+   THE DETECTION / RECOGNITION LOOP
+   - Behavior:
+   * if Continuous mode checked OR tempNoPickup true -> never pause
+   * if Continuous is OFF and parent recognized with linked children -> pause detection (so operator can pick)
+   * after Mark Pickup clicked -> add audits, set tempNoPickup true (for 10s) to avoid immediate re-showing, resume detection
+   ----------------------- */
+function startDetectionLoop() {
+  if (!modelsLoaded) { log("models not loaded yet"); return; }
+  if (detectionInterval) clearInterval(detectionInterval);
+
+  recognitionPaused = false; // ensure unpaused
+
+  const options = new faceapi.TinyFaceDetectorOptions({ inputSize: 224, scoreThreshold: 0.4 });
+
+  detectionInterval = setInterval(async () => {
     try {
-      if (loopPaused || !video || video.readyState < 2) return;
+      // if paused by other logic, skip detection
+      if (recognitionPaused) return;
+
+      if (!video || video.readyState < 2) return;
 
       const detection = await faceapi
         .detectSingleFace(video, options)
         .withFaceLandmarks()
         .withFaceDescriptor();
 
-      ctx.clearRect(0, 0, overlay.width, overlay.height);
-      const resultDiv = $("recognitionResult");
-      const continuousMode = $("noPickupMode")?.checked ?? false;
+      // clear overlay
+      if (ctx) ctx.clearRect(0, 0, overlay.width, overlay.height);
 
-      // No face detected
+      const resultDiv = $("recognitionResult");
+      const globalNoPickup = $("noPickupMode")?.checked ?? false;
+      const effectiveNoPickup = globalNoPickup || tempNoPickup;
+
       if (!detection) {
         lastDetection = null;
-        if (currentMode === "recognition")
+        if (currentMode === "recognition" && resultDiv) {
           resultDiv.innerHTML = `<p style="opacity:0.6">Show a registered face...</p>`;
+        }
         $("registerBtn")?.setAttribute("disabled", true);
         return;
       }
 
       lastDetection = detection;
       const box = detection.detection.box;
+      // Scale to overlay canvas coordinates
       const scaleX = overlay.width / video.videoWidth;
       const scaleY = overlay.height / video.videoHeight;
       const drawBox = {
@@ -174,11 +285,13 @@ async function startDetectionLoop() {
         height: box.height * scaleY,
       };
 
-      // Registration mode: show yellow box
+      // Registration mode: show yellow box and enable register button
       if (currentMode === "registerParent") {
-        ctx.strokeStyle = "yellow";
-        ctx.lineWidth = 2;
-        ctx.strokeRect(drawBox.x, drawBox.y, drawBox.width, drawBox.height);
+        if (ctx) {
+          ctx.strokeStyle = "yellow";
+          ctx.lineWidth = 2;
+          ctx.strokeRect(drawBox.x, drawBox.y, drawBox.width, drawBox.height);
+        }
         $("registerBtn")?.removeAttribute("disabled");
         return;
       }
@@ -188,158 +301,161 @@ async function startDetectionLoop() {
         const best = recognitionMatcher.findBestMatch(detection.descriptor);
 
         if (best.label === "unknown") {
-          ctx.strokeStyle = "red";
-          ctx.lineWidth = 3;
-          ctx.strokeRect(drawBox.x, drawBox.y, drawBox.width, drawBox.height);
-          resultDiv.innerHTML = `<p style="color:#b91c1c;font-weight:bold;">❌ Unrecognized Face</p>`;
-          playBeep(400, 200, "sine");
+          if (ctx) {
+            ctx.strokeStyle = "red";
+            ctx.lineWidth = 3;
+            ctx.strokeRect(drawBox.x, drawBox.y, drawBox.width, drawBox.height);
+          }
+          if (resultDiv) resultDiv.innerHTML = `<p style="color:#b91c1c;font-weight:bold;">❌ Unrecognized Face</p>`;
+          playBeep(400, 220, "sine");
           return;
         }
 
+        // Found a registered parent
         const users = await window.dbAPI.getAllUsers();
-        const parent = users.find((u) => u.name === best.label);
+        const parent = users.find(u => u.name === best.label);
         if (!parent) return;
 
         const links = await window.dbAPI.getAllLinks();
         const children = await window.dbAPI.getAllChildren();
         const linked = links
-          .filter((l) => l.parentId === parent.id)
-          .flatMap((l) => l.childrenIds || [])
-          .map((id) => children.find((c) => c.id === id))
+          .filter(l => l.parentId === parent.id)
+          .flatMap(l => l.childrenIds || [])
+          .map(id => children.find(c => c.id === id))
           .filter(Boolean);
 
-        // Case: no children linked
-        if (linked.length === 0) {
-          ctx.strokeStyle = "yellow";
-          ctx.lineWidth = 3;
-          ctx.strokeRect(drawBox.x, drawBox.y, drawBox.width, drawBox.height);
+        // No children linked -> yellow
+        if (!linked || linked.length === 0) {
+          if (ctx) {
+            ctx.strokeStyle = "yellow";
+            ctx.lineWidth = 3;
+            ctx.strokeRect(drawBox.x, drawBox.y, drawBox.width, drawBox.height);
+          }
+          if (resultDiv) resultDiv.innerHTML = `
+            <p style="color:#eab308;font-weight:bold;">⚠️ Recognized: ${escapeHtml(best.label)}</p>
+            <p>Relation: <strong>${escapeHtml(parent.role)}</strong></p>
+            <p>No linked children found.</p>
+          `;
           playBeep(200, 800, "triangle");
-          resultDiv.innerHTML = `
-            <p style="color:#eab308;font-weight:bold;">⚠️ Recognized: ${best.label}</p>
-            <p>Relation: <strong>${parent.role}</strong></p>
-            <p>No linked children found.</p>`;
           return;
         }
 
-        // Case: recognized with children
-        ctx.strokeStyle = "lime";
-        ctx.lineWidth = 3;
-        ctx.strokeRect(drawBox.x, drawBox.y, drawBox.width, drawBox.height);
+        // Recognized with linked children -> green
+        if (ctx) {
+          ctx.strokeStyle = "lime";
+          ctx.lineWidth = 3;
+          ctx.strokeRect(drawBox.x, drawBox.y, drawBox.width, drawBox.height);
+        }
         playBeep(100, 1000, "square");
 
-        const kidsHtml = linked
-          .map(
-            (c) => `
-              <label style="display:block;margin:3px 0;">
-                <input type="checkbox" class="pickupChild" value="${c.id}">
-                ${c.name} (${c.class}-${c.section})
-              </label>`
-          )
-          .join("");
+        // If effectiveNoPickup is true, we do not present the "Mark Pickup" UI — we just continue scanning
+        if (effectiveNoPickup) {
+          if (resultDiv) resultDiv.innerHTML = `<p style="color:#22c55e;">Recognized ${escapeHtml(parent.name)} — continuing...</p>`;
+          return;
+        }
 
-        resultDiv.innerHTML = `
-          <p style="color:#22c55e;font-weight:bold;">✅ Recognized: ${best.label}</p>
-          <p style="margin-top:-5px;">Relation: <strong>${parent.role}</strong></p>
+        // Else: pause recognition until operator marks pickup (to avoid repeat)
+        recognitionPaused = true;
+
+        // Build child checklist UI
+        const kidsHtml = linked.map(c => `
+          <label style="display:block;margin:3px 0;">
+            <input type="checkbox" class="pickupChild" value="${c.id}">
+            ${escapeHtml(c.name)} (${escapeHtml(c.class)}-${escapeHtml(c.section)})
+          </label>`).join("");
+
+        if (resultDiv) resultDiv.innerHTML = `
+          <p style="color:#22c55e;font-weight:bold;">✅ Recognized: ${escapeHtml(parent.name)}</p>
+          <p style="margin-top:-6px;">Relation: <strong>${escapeHtml(parent.role)}</strong></p>
           <p>Linked Children:</p>
-          <div style="max-height:120px;overflow-y:auto;border:1px solid #ddd;padding:4px;border-radius:6px;">
+          <div style="max-height:140px;overflow-y:auto;border:1px solid #ddd;padding:6px;border-radius:6px;">
             ${kidsHtml}
           </div>
-          <button id="auditBtn" disabled style="margin-top:6px;">Mark Pickup</button>
+          <div style="margin-top:8px;">
+            <button id="auditBtn" disabled>Mark Pickup</button>
+            <button id="cancelRecognitionBtn" style="margin-left:8px;">Cancel</button>
+          </div>
           <div id="recentAudits" style="margin-top:10px;font-size:0.9rem;"></div>
         `;
 
+        // wire up buttons & checkboxes
         const checkboxes = document.querySelectorAll(".pickupChild");
         const auditBtn = $("auditBtn");
+        const cancelBtn = $("cancelRecognitionBtn");
 
-        checkboxes.forEach((cb) =>
-          cb.addEventListener("change", () => {
-            const anyChecked = Array.from(checkboxes).some((c) => c.checked);
-            auditBtn.disabled = !anyChecked;
-          })
-        );
+        // enable audit button only if at least one child checked
+        if (checkboxes && auditBtn) {
+          checkboxes.forEach(cb => cb.addEventListener("change", () => {
+            const any = Array.from(checkboxes).some(c => c.checked);
+            auditBtn.disabled = !any;
+          }));
+        }
 
-        // Pause recognition until marked if continuous mode is OFF
-        if (!continuousMode) loopPaused = true;
+        // Cancel button: resume recognition without marking
+        if (cancelBtn) {
+          cancelBtn.onclick = () => {
+            recognitionPaused = false;
+            if ($("recognitionResult")) $("recognitionResult").innerHTML = `<p style="opacity:0.6">Ready for next recognition...</p>`;
+          };
+        }
 
-        auditBtn.onclick = async () => {
-          const selected = Array.from(document.querySelectorAll(".pickupChild:checked")).map(
-            (el) => el.value
-          );
-          if (selected.length === 0) return alert("Select at least one child to mark pickup.");
+        // Audit button: save selected audits, then enter temporary no-pickup mode and resume scanning
+        if (auditBtn) {
+          auditBtn.onclick = async () => {
+            const selectedIds = Array.from(document.querySelectorAll(".pickupChild:checked")).map(i => i.value);
+            if (!selectedIds || selectedIds.length === 0) return alert("Select at least one child.");
 
-          const now = new Date();
-          const formatted = now.toLocaleString();
+            const now = new Date();
+            const formatted = now.toLocaleString();
 
-          for (const chId of selected) {
-            const child = linked.find((c) => c.id === chId);
-            await window.dbAPI.addAudit({
-              id: Date.now().toString() + Math.random(),
-              parentName: parent.name,
-              relation: parent.role,
-              childName: child.name,
-              class: child.class,
-              section: child.section,
-              pickupTime: formatted,
-              timestamp: Date.now(),
-            });
-          }
+            // save audits
+            for (const chId of selectedIds) {
+              const ch = linked.find(x => x.id === chId);
+              await window.dbAPI.addAudit({
+                id: Date.now().toString() + Math.random(),
+                parentName: parent.name,
+                relation: parent.role,
+                childName: ch.name,
+                class: ch.class,
+                section: ch.section,
+                pickupTime: formatted,
+                timestamp: Date.now()
+              });
+            }
 
-          alert(`✅ Pickup marked for ${selected.length} child(ren).`);
-          await showRecentAudits();
+            // show confirmation
+            alert(`✅ Pickup marked for ${selectedIds.length} child(ren).`);
 
-          // Resume recognition automatically
-          loopPaused = false;
-          resultDiv.innerHTML = `<p style="opacity:0.6">Ready for next recognition...</p>`;
-        };
+            // refresh recent audits list
+            await showRecentAudits();
 
+            // set temporary no-pickup mode (so system continues scanning without pausing for this same face)
+            tempNoPickup = true;
+            // resume recognition immediately
+            recognitionPaused = false;
+
+            // keep the temporary no-pickup for 10 seconds (configurable)
+            setTimeout(() => { tempNoPickup = false; }, 10000);
+          };
+        }
+
+        // show recent audits initially
         await showRecentAudits();
       }
+
     } catch (err) {
       console.error("Detection loop error:", err);
     }
   }, 600);
 }
 
-
-/* ============================================================
-   Recent Audit Viewer
-   ============================================================ */
-async function showRecentAudits() {
-  const recent = await window.dbAPI.getLastAudits();
-  const sorted = recent.sort((a, b) => b.timestamp - a.timestamp).slice(0, 10);
-
-  const html = sorted
-    .map(
-      (r) =>
-        `<div>🕒 ${r.pickupTime} - ${r.parentName} (${r.relation}) picked up ${r.childName} [${r.class}-${r.section}]</div>`
-    )
-    .join("");
-
-  if ($("recentAudits")) $("recentAudits").innerHTML = html || "<em>No pickup records yet.</em>";
-}
-
-
-/* ============================================================
-   Database-Linked Logic
-   ============================================================ */
-async function buildMatcherFromDB() {
-  const users = await window.dbAPI.getAllUsers();
-  const labeled = [];
-  for (const u of users) {
-    if (u.descriptor && Array.isArray(u.descriptor)) {
-      labeled.push(new faceapi.LabeledFaceDescriptors(u.name, [new Float32Array(u.descriptor)]));
-    }
-  }
-  recognitionMatcher = labeled.length ? new faceapi.FaceMatcher(labeled, 0.55) : null;
-}
-
-/* ============================================================
-   Admin & UI Modules
-   ============================================================ */
+/* -----------------------
+   Admin + UI modules
+   ----------------------- */
 function toggleCameraVisibility(show) {
-  const display = show ? "block" : "none";
-  if (video) video.style.display = display;
-  if (overlay) overlay.style.display = display;
+  if (!video || !overlay) return;
+  video.style.display = show ? "block" : "none";
+  overlay.style.display = show ? "block" : "none";
 }
 
 async function loadRegisterParent() {
@@ -347,28 +463,21 @@ async function loadRegisterParent() {
   toggleCameraVisibility(true);
   $("modeContent").innerHTML = `
     <h3>Register Parent</h3>
-    <label>Parent Name:</label>
-    <input id="parentName" placeholder="e.g. John Doe" />
-    <label>Role:</label>
-    <select id="parentRole">
-      <option value="father">Father</option>
-      <option value="mother">Mother</option>
-      <option value="guardian">Guardian</option>
-    </select>
-    <button id="registerBtn" disabled>Register</button>
+    <label>Parent Name</label><input id="parentName" placeholder="name (lowercase will be saved)" />
+    <label>Role</label><select id="parentRole"><option>father</option><option>mother</option><option>guardian</option></select>
+    <div style="margin-top:8px;"><button id="registerBtn" disabled>Register</button></div>
   `;
   await startCamera();
-
   $("registerBtn").onclick = async () => {
     const name = $("parentName").value.trim().toLowerCase();
-    const role = $("parentRole").value.toLowerCase();
-    if (!name) return alert("Enter parent name.");
-    if (!lastDetection) return alert("No face detected.");
+    const role = $("parentRole").value.trim().toLowerCase();
+    if (!name) return alert("Enter parent name");
+    if (!lastDetection || !lastDetection.descriptor) return alert("No face detected");
     const desc = Array.from(lastDetection.descriptor);
     await window.dbAPI.addUser({ id: Date.now().toString(), name, role, descriptor: desc });
-    alert("✅ Parent Registered!");
     await buildMatcherFromDB();
     await updateStats();
+    alert("Parent registered");
   };
 }
 
@@ -377,39 +486,36 @@ async function loadClassManager() {
   toggleCameraVisibility(false);
   stopCamera();
   $("modeContent").innerHTML = `
-    <h3>Manage Classes & Sections</h3>
-    <label>Class:</label>
-    <input id="classInput" placeholder="e.g. 8th" />
-    <button id="addClassBtn">Add Class</button>
+    <h3>Classes & Sections</h3>
+    <label>Class</label><input id="classInput" placeholder="e.g. 8" /><button id="addClassBtn">Add</button>
     <ul id="classList"></ul>
-    <label>Section:</label>
-    <input id="sectionInput" placeholder="e.g. A" />
-    <button id="addSectionBtn">Add Section</button>
+    <label>Section</label><input id="sectionInput" placeholder="e.g. A" /><button id="addSectionBtn">Add</button>
     <ul id="sectionList"></ul>
   `;
-  refreshClassSectionLists();
-
   $("addClassBtn").onclick = async () => {
-    const c = $("classInput").value.trim().toLowerCase();
-    if (!c) return;
-    await window.dbAPI.addClassEntry({ id: Date.now().toString(), className: c });
+    const v = $("classInput").value.trim().toLowerCase();
+    if (!v) return alert("Enter class");
+    await window.dbAPI.addClassEntry({ id: Date.now().toString(), className: v });
     $("classInput").value = "";
     refreshClassSectionLists();
   };
   $("addSectionBtn").onclick = async () => {
-    const s = $("sectionInput").value.trim().toLowerCase();
-    if (!s) return;
-    await window.dbAPI.addSectionEntry({ id: Date.now().toString(), sectionName: s });
+    const v = $("sectionInput").value.trim().toLowerCase();
+    if (!v) return alert("Enter section");
+    await window.dbAPI.addSectionEntry({ id: Date.now().toString(), sectionName: v });
     $("sectionInput").value = "";
     refreshClassSectionLists();
   };
+  refreshClassSectionLists();
 }
 
 async function refreshClassSectionLists() {
-  const classes = await window.dbAPI.getAllClasses();
-  const sections = await window.dbAPI.getAllSections();
-  $("classList").innerHTML = classes.map((c) => `<li>${c.className}</li>`).join("");
-  $("sectionList").innerHTML = sections.map((s) => `<li>${s.sectionName}</li>`).join("");
+  try {
+    const classes = await window.dbAPI.getAllClasses();
+    const sections = await window.dbAPI.getAllSections();
+    $("classList").innerHTML = classes.map(c => `<li>${escapeHtml(c.className)}</li>`).join("");
+    $("sectionList").innerHTML = sections.map(s => `<li>${escapeHtml(s.sectionName)}</li>`).join("");
+  } catch (e) { console.warn("refreshClassSectionLists failed", e); }
 }
 
 async function loadRegisterChild() {
@@ -420,174 +526,129 @@ async function loadRegisterChild() {
   const sections = await window.dbAPI.getAllSections();
   $("modeContent").innerHTML = `
     <h3>Register Child</h3>
-    <label>Child Name:</label>
-    <input id="childName" />
-    <label>Class:</label>
-    <select id="childClass">
-      ${classes.map((c) => `<option>${c.className}</option>`).join("")}
-    </select>
-    <label>Section:</label>
-    <select id="childSection">
-      ${sections.map((s) => `<option>${s.sectionName}</option>`).join("")}
-    </select>
-    <button id="addChildBtn">Register Child</button>
+    <label>Child Name</label><input id="childName" />
+    <label>Class</label><select id="childClass">${classes.map(c=>`<option>${escapeHtml(c.className)}</option>`).join("")}</select>
+    <label>Section</label><select id="childSection">${sections.map(s=>`<option>${escapeHtml(s.sectionName)}</option>`).join("")}</select>
+    <div style="margin-top:8px;"><button id="addChildBtn">Register Child</button></div>
   `;
   $("addChildBtn").onclick = async () => {
     const name = $("childName").value.trim().toLowerCase();
     const cls = $("childClass").value;
     const sec = $("childSection").value;
-    if (!name) return alert("Enter child name.");
+    if (!name) return alert("Enter child name");
     await window.dbAPI.addChild({ id: Date.now().toString(), name, class: cls, section: sec });
-    alert("✅ Child Registered!");
     await updateStats();
+    alert("Child added");
   };
 }
 
-/* ============================================================
-   Parent–Child Linking with Search & Filters
-   ============================================================ */
 async function loadLinkParentChild() {
   currentMode = "link";
   toggleCameraVisibility(false);
   stopCamera();
-
-  const allParents = await window.dbAPI.getAllUsers();
-  const allChildren = await window.dbAPI.getAllChildren();
+  // We'll render a search+filters UI (assumes db has getAllUsers/getAllChildren/getAllClasses/getAllSections)
+  const parents = await window.dbAPI.getAllUsers();
+  const children = await window.dbAPI.getAllChildren();
   const classes = await window.dbAPI.getAllClasses();
   const sections = await window.dbAPI.getAllSections();
 
   $("modeContent").innerHTML = `
-    <h3>Link Parent and Child</h3>
-
-    <div style="display:flex;flex-direction:column;gap:1rem;max-width:600px;">
-
-      <div style="border:1px solid #ccc;padding:10px;border-radius:8px;">
-        <h4>Search Parent</h4>
-        <input id="parentSearch" type="text" placeholder="Type first 3 letters of parent name..." style="width:100%;padding:6px;">
-        <select id="parentSelect" size="5" style="width:100%;margin-top:5px;"></select>
+    <h3>Link Parent & Child</h3>
+    <div style="max-width:700px;">
+      <div><label>Parent (type first 3 letters)</label><input id="parentSearch" placeholder="type at least 3 letters" /></div>
+      <div><select id="parentSelect" size="6" style="width:100%;"></select></div>
+      <div style="display:flex;gap:8px;margin-top:8px;">
+        <select id="filterClass"><option value="">All Classes</option>${classes.map(c=>`<option>${escapeHtml(c.className)}</option>`).join("")}</select>
+        <select id="filterSection"><option value="">All Sections</option>${sections.map(s=>`<option>${escapeHtml(s.sectionName)}</option>`).join("")}</select>
       </div>
-
-      <div style="border:1px solid #ccc;padding:10px;border-radius:8px;">
-        <h4>Filter Children</h4>
-        <div style="display:flex;gap:10px;flex-wrap:wrap;">
-          <select id="childClassFilter" style="flex:1;">
-            <option value="">All Classes</option>
-            ${classes.map(c => `<option value="${c.className}">${c.className}</option>`).join("")}
-          </select>
-          <select id="childSectionFilter" style="flex:1;">
-            <option value="">All Sections</option>
-            ${sections.map(s => `<option value="${s.sectionName}">${s.sectionName}</option>`).join("")}
-          </select>
-        </div>
-        <select id="childSelect" multiple size="8" style="width:100%;margin-top:10px;"></select>
-      </div>
-
-      <button id="linkBtn">Link Selected</button>
+      <div style="margin-top:8px;"><select id="childSelect" multiple size="8" style="width:100%;">${children.map(ch => `<option value="${ch.id}">${escapeHtml(ch.name)} (${escapeHtml(ch.class)}-${escapeHtml(ch.section)})</option>`).join("")}</select></div>
+      <div style="margin-top:8px;"><button id="linkBtn">Link Selected</button></div>
     </div>
   `;
 
-  const parentSelect = $("parentSelect");
-  const parentSearch = $("parentSearch");
-  const childSelect = $("childSelect");
-  const classFilter = $("childClassFilter");
-  const sectionFilter = $("childSectionFilter");
+  const parentSearchEl = $("parentSearch");
+  const parentSelectEl = $("parentSelect");
+  const classFilterEl = $("filterClass");
+  const sectionFilterEl = $("filterSection");
+  const childSelectEl = $("childSelect");
 
-  // --- Parent search ---
-  function renderParents(list) {
-    parentSelect.innerHTML = list
-      .map(p => `<option value="${p.id}">${p.name} (${p.role})</option>`)
-      .join("");
-  }
-
-  parentSearch.addEventListener("input", () => {
-    const term = parentSearch.value.trim().toLowerCase();
+  parentSearchEl.oninput = () => {
+    const term = parentSearchEl.value.trim().toLowerCase();
     if (term.length < 3) {
-      parentSelect.innerHTML = "<option disabled>Type at least 3 letters...</option>";
+      parentSelectEl.innerHTML = "<option disabled>Type at least 3 letters...</option>";
       return;
     }
-    const filtered = allParents.filter(p => p.name.startsWith(term));
-    if (filtered.length > 0) renderParents(filtered);
-    else parentSelect.innerHTML = "<option disabled>No matches found</option>";
-  });
-
-  // --- Child filtering ---
-  function renderChildren(list) {
-    childSelect.innerHTML = list
-      .map(c => `<option value="${c.id}">${c.name} (${c.class}-${c.section})</option>`)
-      .join("");
-  }
+    const matches = parents.filter(p => p.name.startsWith(term));
+    parentSelectEl.innerHTML = matches.map(m => `<option value="${m.id}">${escapeHtml(m.name)} (${escapeHtml(m.role)})</option>`).join("") || "<option disabled>No matches</option>";
+  };
 
   function applyChildFilters() {
-    const cls = classFilter.value;
-    const sec = sectionFilter.value;
-    let filtered = [...allChildren];
-    if (cls) filtered = filtered.filter(c => c.class === cls);
-    if (sec) filtered = filtered.filter(c => c.section === sec);
-    renderChildren(filtered);
+    const cls = classFilterEl.value;
+    const sec = sectionFilterEl.value;
+    let list = children;
+    if (cls) list = list.filter(c => c.class === cls);
+    if (sec) list = list.filter(c => c.section === sec);
+    childSelectEl.innerHTML = list.map(c => `<option value="${c.id}">${escapeHtml(c.name)} (${escapeHtml(c.class)}-${escapeHtml(c.section)})</option>`).join("");
   }
 
-  classFilter.addEventListener("change", applyChildFilters);
-  sectionFilter.addEventListener("change", applyChildFilters);
+  classFilterEl.onchange = applyChildFilters;
+  sectionFilterEl.onchange = applyChildFilters;
 
-  // Initial child list
-  renderChildren(allChildren);
-
-  // --- Linking ---
   $("linkBtn").onclick = async () => {
-    const pid = parentSelect.value;
-    const kids = Array.from(childSelect.selectedOptions).map(o => o.value);
-    if (!pid) return alert("Select a parent.");
-    if (kids.length === 0) return alert("Select one or more children.");
-
-    await window.dbAPI.addLink({
-      id: Date.now().toString(),
-      parentId: pid,
-      childrenIds: kids,
-    });
-
-    alert("✅ Linked successfully!");
+    const pid = parentSelectEl.value;
+    const kids = Array.from(childSelectEl.selectedOptions).map(o => o.value);
+    if (!pid) return alert("Select parent");
+    if (kids.length === 0) return alert("Select children");
+    await window.dbAPI.addLink({ id: Date.now().toString(), parentId: pid, childrenIds: kids });
+    alert("Linked");
   };
 }
 
+/* -----------------------
+   Recognition page
+   ----------------------- */
 async function loadRecognitionMode() {
   currentMode = "recognition";
   toggleCameraVisibility(true);
-  $("modeContent").innerHTML = `
-    <h3>Recognition Mode</h3>
-    <div id="recognitionResult">Show a registered face...</div>
-  `;
+  $("modeContent").innerHTML = `<h3>Recognition Mode</h3><div id="recognitionResult">Show a registered face...</div><div style="margin-top:8px;"><label><input type="checkbox" id="noPickupMode" /> Continuous Recognition (no pickup pause)</label></div>`;
   await startCamera();
 }
 
-/* ============================================================
-   Stats and Menu Setup
-   ============================================================ */
+/* -----------------------
+   Stats & menu
+   ----------------------- */
 async function updateStats() {
-  const parents = await window.dbAPI.getAllUsers();
-  const children = await window.dbAPI.getAllChildren();
-  $("parentCount").textContent = parents.length;
-  $("childCount").textContent = children.length;
+  try {
+    const parents = await window.dbAPI.getAllUsers();
+    const children = await window.dbAPI.getAllChildren();
+    if ($("parentCount")) $("parentCount").textContent = parents.length;
+    if ($("childCount")) $("childCount").textContent = children.length;
+  } catch (e) { console.warn("updateStats failed", e); }
 }
 
 function setupMenu() {
-  const bind = (id, fn) => { const el = $(id); if (el) el.onclick = fn; };
-  bind("btnAdmin", loadRegisterParent);
-  bind("btnClass", loadClassManager);
-  bind("btnChild", loadRegisterChild);
-  bind("btnLink", loadLinkParentChild);
-  bind("btnRecognition", loadRecognitionMode);
+  const safeBind = (id, fn) => { const el = $(id); if (el) el.onclick = fn; else log("Menu item", id, "missing"); };
+  safeBind("btnAdmin", loadRegisterParent);
+  safeBind("btnClass", loadClassManager);
+  safeBind("btnChild", loadRegisterChild);
+  safeBind("btnLink", loadLinkParentChild);
+  safeBind("btnRecognition", loadRecognitionMode);
 }
 
-/* ============================================================
-   Initialization
-   ============================================================ */
+/* -----------------------
+   App init
+   ----------------------- */
 document.addEventListener("DOMContentLoaded", async () => {
+  // get elements
   video = $("video");
   overlay = $("overlay");
-  ctx = overlay.getContext("2d");
+  ctx = overlay ? overlay.getContext("2d") : null;
 
+  // ensure db ready
   if (window.dbAPI && typeof window.dbAPI.openDB === "function") {
     await window.dbAPI.openDB();
+  } else {
+    console.warn("dbAPI.openDB not present (will try to use other dbAPI methods).");
   }
 
   setupMenu();
@@ -595,7 +656,12 @@ document.addEventListener("DOMContentLoaded", async () => {
   await populateCameraList();
   await buildMatcherFromDB();
   await updateStats();
-  toggleCameraVisibility(false); // hidden by default
-  setStatus("✅ App Ready");
+  setStatus("App ready");
 });
 
+/* -----------------------
+   Expose for debug
+   ----------------------- */
+window._pickupDebug = {
+  startCamera, stopCamera, startDetectionLoop, buildMatcherFromDB, fetchAudits, showRecentAudits
+};
