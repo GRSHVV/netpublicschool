@@ -256,3 +256,18 @@ li {
   border-radius: var(--border-radius);
   min-height: 100px;
 }
+
+#reportTable {
+  width: 100%;
+  border-collapse: collapse;
+  margin-top: 10px;
+}
+#reportTable th, #reportTable td {
+  border: 1px solid #ddd;
+  padding: 6px;
+  font-size: 0.9rem;
+}
+#reportTable th {
+  background: #f1f5f9;
+  font-weight: 600;
+}
