@@ -717,6 +717,86 @@ async function loadReports() {
   };
 }
 
+/* ======= Data Export / Import ======= */
+async function exportDataZip() {
+  const pass = prompt("Enter password to export data:");
+  if (pass !== "CBwbzgo@123") {
+    alert("❌ Incorrect password!");
+    return;
+  }
+
+  const zip = new JSZip();
+  const stores = ["users", "children", "classes", "sections", "links", "audits"];
+
+  for (const storeName of stores) {
+    try {
+      const data = await new Promise((resolve, reject) => {
+        const tx = window.dbAPI._getDB().transaction(storeName, "readonly");
+        const store = tx.objectStore(storeName);
+        const req = store.getAll();
+        req.onsuccess = () => resolve(req.result);
+        req.onerror = (e) => reject(e);
+      });
+      zip.file(`${storeName}.json`, JSON.stringify(data, null, 2));
+    } catch (err) {
+      console.error(`Error reading ${storeName}:`, err);
+    }
+  }
+
+  const blob = await zip.generateAsync({ type: "blob" });
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob);
+  a.download = `school_data_backup_${new Date().toISOString().split("T")[0]}.zip`;
+  a.click();
+  URL.revokeObjectURL(a.href);
+  alert("✅ Data exported successfully!");
+}
+
+async function importDataZip() {
+  const pass = prompt("Enter password to import data:");
+  if (pass !== "CBwbzgo@123") {
+    alert("❌ Incorrect password!");
+    return;
+  }
+
+  const input = document.createElement("input");
+  input.type = "file";
+  input.accept = ".zip";
+  input.onchange = async (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+
+    try {
+      const zip = await JSZip.loadAsync(file);
+      const stores = ["users", "children", "classes", "sections", "links", "audits"];
+      const db = window.dbAPI._getDB();
+
+      for (const storeName of stores) {
+        if (!zip.file(`${storeName}.json`)) continue;
+
+        const content = await zip.file(`${storeName}.json`).async("string");
+        const data = JSON.parse(content);
+
+        const tx = db.transaction(storeName, "readwrite");
+        const store = tx.objectStore(storeName);
+        store.clear(); // wipe old data
+
+        for (const item of data) {
+          store.put(item);
+        }
+      }
+
+      alert("✅ Data imported successfully!");
+      location.reload();
+    } catch (err) {
+      console.error("Import error:", err);
+      alert("❌ Failed to import data.");
+    }
+  };
+
+  input.click();
+}
+
 
 function setupMenu() {
   const safeBind = (id, fn) => { const el = $(id); if (el) el.onclick = fn; else log("Menu item", id, "missing"); };
@@ -726,6 +806,9 @@ function setupMenu() {
   safeBind("btnLink", loadLinkParentChild);
   safeBind("btnRecognition", loadRecognitionMode);
   safeBind("btnReports", loadReports);
+  safeBind("btnExport", exportDataZip);
+  safeBind("btnImport", importDataZip);
+  
 }
 
 /* -----------------------
@@ -761,4 +844,5 @@ document.addEventListener("DOMContentLoaded", async () => {
 window._pickupDebug = {
   startCamera, stopCamera, startDetectionLoop, buildMatcherFromDB, fetchAudits, showRecentAudits
 };
+
 
