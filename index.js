@@ -91,6 +91,29 @@ async function populateCameraList() {
     console.warn("populateCameraList failed", e);
   }
 }
+// === Camera control helpers ===
+let currentDeviceId = null;
+
+async function setActiveCamera(deviceId) {
+  currentDeviceId = deviceId;
+  const video = document.getElementById("videoFeed");
+  if (video.srcObject) {
+    video.srcObject.getTracks().forEach(t => t.stop());
+  }
+
+  const stream = await navigator.mediaDevices.getUserMedia({
+    video: { deviceId: { exact: deviceId } },
+  });
+
+  video.srcObject = stream;
+  await video.play();
+
+  // ✅ sync dropdown selection
+  const camSelect = document.getElementById("cameraSelect");
+  if (camSelect && camSelect.value !== deviceId) {
+    camSelect.value = deviceId;
+  }
+}
 
 async function startCamera(deviceId = null) {
   try {
@@ -102,13 +125,14 @@ async function startCamera(deviceId = null) {
     const stream = await navigator.mediaDevices.getUserMedia(constraints);
     video.srcObject = stream;
     await video.play();
-
+    
     // size overlay to displayed video
     overlay.width = video.videoWidth;
     overlay.height = video.videoHeight;
 
     if (modelsLoaded) startDetectionLoop();
     setStatus("Camera active");
+    setActiveCamera(deviceId);
   } catch (err) {
     console.error("startCamera error", err);
     setStatus("Camera error: " + (err.message || err.name));
@@ -870,6 +894,7 @@ document.addEventListener("DOMContentLoaded", async () => {
 window._pickupDebug = {
   startCamera, stopCamera, startDetectionLoop, buildMatcherFromDB, fetchAudits, showRecentAudits
 };
+
 
 
 
