@@ -729,7 +729,7 @@ async function exportDataZip() {
   const zip = new JSZip();
 
   const stores = [
-    { name: "users",     fn: window.dbAPI.getAllUsers },
+    { name: "parents",     fn: window.dbAPI.getAllUsers },
     { name: "children",  fn: window.dbAPI.getAllChildren },
     { name: "classes",   fn: window.dbAPI.getAllClasses },
     { name: "sections",  fn: window.dbAPI.getAllSections },
@@ -870,6 +870,7 @@ document.addEventListener("DOMContentLoaded", async () => {
 window._pickupDebug = {
   startCamera, stopCamera, startDetectionLoop, buildMatcherFromDB, fetchAudits, showRecentAudits
 };
+
 
 
 
