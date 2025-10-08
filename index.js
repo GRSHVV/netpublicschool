@@ -794,7 +794,7 @@ function importDataZip() {
 
     try {
       const zip = await JSZip.loadAsync(file);
-      const stores = ["users", "children", "classes", "sections", "links", "audits"];
+      const stores = ["parents", "children", "classes", "sections", "links", "audits"];
 
       for (const storeName of stores) {
         const zipFile = zip.file(`${storeName}.json`);
@@ -870,6 +870,7 @@ document.addEventListener("DOMContentLoaded", async () => {
 window._pickupDebug = {
   startCamera, stopCamera, startDetectionLoop, buildMatcherFromDB, fetchAudits, showRecentAudits
 };
+
 
 
 
