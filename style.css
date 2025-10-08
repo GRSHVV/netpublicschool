@@ -271,3 +271,15 @@ li {
   background: #f1f5f9;
   font-weight: 600;
 }
+
+#btnExport, #btnImport {
+  background-color: #0ea5e9;
+  color: white;
+  font-weight: 500;
+  margin-top: 5px;
+}
+
+#btnExport:hover, #btnImport:hover {
+  opacity: 0.85;
+}
+
