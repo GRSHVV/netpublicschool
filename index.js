@@ -718,6 +718,7 @@ async function loadReports() {
 }
 
 /* ======= Data Export / Import ======= */
+/* ======= Export Data (ZIP) – fixed ======= */
 async function exportDataZip() {
   const pass = prompt("Enter password to export data:");
   if (pass !== "CBwbzgo@123") {
@@ -726,20 +727,23 @@ async function exportDataZip() {
   }
 
   const zip = new JSZip();
-  const stores = ["users", "children", "classes", "sections", "links", "audits"];
 
-  for (const storeName of stores) {
+  const stores = [
+    { name: "users",     fn: window.dbAPI.getAllUsers },
+    { name: "children",  fn: window.dbAPI.getAllChildren },
+    { name: "classes",   fn: window.dbAPI.getAllClasses },
+    { name: "sections",  fn: window.dbAPI.getAllSections },
+    { name: "links",     fn: window.dbAPI.getAllLinks },
+    { name: "audits",    fn: window.dbAPI.getAllAudits }
+  ];
+
+  for (const s of stores) {
     try {
-      const data = await new Promise((resolve, reject) => {
-        const tx = window.dbAPI._getDB().transaction(storeName, "readonly");
-        const store = tx.objectStore(storeName);
-        const req = store.getAll();
-        req.onsuccess = () => resolve(req.result);
-        req.onerror = (e) => reject(e);
-      });
-      zip.file(`${storeName}.json`, JSON.stringify(data, null, 2));
-    } catch (err) {
-      console.error(`Error reading ${storeName}:`, err);
+      const data = (await s.fn.call(window.dbAPI)) || [];
+      zip.file(`${s.name}.json`, JSON.stringify(data, null, 2));
+    } catch (e) {
+      console.error(`Error reading ${s.name}:`, e);
+      zip.file(`${s.name}.json`, "[]");
     }
   }
 
@@ -771,20 +775,14 @@ async function importDataZip() {
       const stores = ["users", "children", "classes", "sections", "links", "audits"];
       const db = window.dbAPI._getDB();
 
-      for (const storeName of stores) {
-        if (!zip.file(`${storeName}.json`)) continue;
-
-        const content = await zip.file(`${storeName}.json`).async("string");
-        const data = JSON.parse(content);
-
-        const tx = db.transaction(storeName, "readwrite");
-        const store = tx.objectStore(storeName);
-        store.clear(); // wipe old data
-
-        for (const item of data) {
-          store.put(item);
-        }
+      for (const storeName of ["users","children","classes","sections","links","audits"]) {
+        const file = zip.file(`${storeName}.json`);
+        if (!file) continue;
+          const text = await file.async("string");
+          const data = JSON.parse(text || "[]");
+        for (const item of data) await window.dbAPI[`add${storeName.charAt(0).toUpperCase()+storeName.slice(1,storeName.length-1)}`]?.(item);
       }
+
 
       alert("✅ Data imported successfully!");
       location.reload();
@@ -844,5 +842,6 @@ document.addEventListener("DOMContentLoaded", async () => {
 window._pickupDebug = {
   startCamera, stopCamera, startDetectionLoop, buildMatcherFromDB, fetchAudits, showRecentAudits
 };
+
 
 
