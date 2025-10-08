@@ -120,7 +120,7 @@ async function startCamera(deviceId = null) {
     stopCamera();
     const constraints = deviceId
       ? { video: { deviceId: { ideal: deviceId } } }
-      : { video: { facingMode: { ideal: "environment" }, width: { ideal: 1280 } } };
+      : { video: { facingMode: { ideal: "user" }, width: { ideal: 1280 } } };
 
     const stream = await navigator.mediaDevices.getUserMedia(constraints);
     video.srcObject = stream;
@@ -894,6 +894,7 @@ document.addEventListener("DOMContentLoaded", async () => {
 window._pickupDebug = {
   startCamera, stopCamera, startDetectionLoop, buildMatcherFromDB, fetchAudits, showRecentAudits
 };
+
 
 
 
