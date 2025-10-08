@@ -652,6 +652,7 @@ async function updateStats() {
 
 /* ======= Reports Section ======= */
 async function loadReports() {
+  toggleCameraVisibility(false);
   $("modeContent").innerHTML = `
     <h3>Audit Reports</h3>
     <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px;">
@@ -894,6 +895,7 @@ document.addEventListener("DOMContentLoaded", async () => {
 window._pickupDebug = {
   startCamera, stopCamera, startDetectionLoop, buildMatcherFromDB, fetchAudits, showRecentAudits
 };
+
 
 
 
