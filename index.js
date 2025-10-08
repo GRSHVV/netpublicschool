@@ -756,43 +756,71 @@ async function exportDataZip() {
   alert("✅ Data exported successfully!");
 }
 
-async function importDataZip() {
-  const pass = prompt("Enter password to import data:");
-  if (pass !== "CBwbzgo@123") {
-    alert("❌ Incorrect password!");
-    return;
-  }
+/* ======= Import Data (ZIP) – UI Form Version ======= */
+function importDataZip() {
+  $("modeContent").innerHTML = `
+    <h3>Import School Data</h3>
+    <p style="color:#555;">Upload a ZIP file previously exported from this system.</p>
+    <form id="importForm" style="margin-top:10px;">
+      <label>Password:</label><br/>
+      <input type="password" id="importPass" placeholder="Enter admin password" required style="margin-bottom:8px;width:60%;"/><br/>
+      <label>Choose ZIP File:</label><br/>
+      <input type="file" id="zipFileInput" accept=".zip" required style="margin-bottom:10px;"/><br/>
+      <button type="submit" id="startImport">Start Import</button>
+    </form>
+    <div id="importStatus" style="margin-top:12px;color:#444;"></div>
+  `;
 
-  const input = document.createElement("input");
-  input.type = "file";
-  input.accept = ".zip";
-  input.onchange = async (e) => {
-    const file = e.target.files[0];
-    if (!file) return;
+  const form = $("importForm");
+  const passInput = $("importPass");
+  const fileInput = $("zipFileInput");
+  const statusDiv = $("importStatus");
+
+  form.onsubmit = async (e) => {
+    e.preventDefault();
+
+    if (passInput.value !== "CBwbzgo@123") {
+      alert("❌ Incorrect password!");
+      return;
+    }
+
+    const file = fileInput.files[0];
+    if (!file) {
+      alert("Please select a ZIP file.");
+      return;
+    }
+
+    statusDiv.innerHTML = "📦 Importing... please wait.";
 
     try {
       const zip = await JSZip.loadAsync(file);
       const stores = ["users", "children", "classes", "sections", "links", "audits"];
-      const db = window.dbAPI._getDB();
 
-      for (const storeName of ["users","children","classes","sections","links","audits"]) {
-        const file = zip.file(`${storeName}.json`);
-        if (!file) continue;
-          const text = await file.async("string");
-          const data = JSON.parse(text || "[]");
-        for (const item of data) await window.dbAPI[`add${storeName.charAt(0).toUpperCase()+storeName.slice(1,storeName.length-1)}`]?.(item);
+      for (const storeName of stores) {
+        const zipFile = zip.file(`${storeName}.json`);
+        if (!zipFile) continue;
+
+        const content = await zipFile.async("string");
+        const data = JSON.parse(content || "[]");
+        const db = await window.dbAPI.openDB();
+        const tx = db.transaction(storeName, "readwrite");
+        const store = tx.objectStore(storeName);
+        store.clear();
+
+        for (const item of data) {
+          store.put(item);
+        }
       }
 
-
+      statusDiv.innerHTML = "✅ Import complete! Data successfully restored.";
       alert("✅ Data imported successfully!");
-      location.reload();
+      setTimeout(() => location.reload(), 2000);
     } catch (err) {
       console.error("Import error:", err);
+      statusDiv.innerHTML = "❌ Import failed. Check console for details.";
       alert("❌ Failed to import data.");
     }
   };
-
-  input.click();
 }
 
 
@@ -842,6 +870,7 @@ document.addEventListener("DOMContentLoaded", async () => {
 window._pickupDebug = {
   startCamera, stopCamera, startDetectionLoop, buildMatcherFromDB, fetchAudits, showRecentAudits
 };
+
 
 
 
