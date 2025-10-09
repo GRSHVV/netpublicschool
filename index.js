@@ -501,7 +501,7 @@ $("modeContent").innerHTML = `
 `;
 
 const parentSelect = $("parentSelect");
-const parents = await window.dbAPI.getAllParents();
+const parents = await window.dbAPI.getAllUsers();
 
 // populate dropdown
 parentSelect.innerHTML += parents
@@ -937,6 +937,7 @@ document.addEventListener("DOMContentLoaded", async () => {
 window._pickupDebug = {
   startCamera, stopCamera, startDetectionLoop, buildMatcherFromDB, fetchAudits, showRecentAudits
 };
+
 
 
 
