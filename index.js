@@ -482,6 +482,9 @@ function toggleCameraVisibility(show) {
   overlay.style.display = show ? "block" : "none";
 }
 
+async function loadRegisterParent() {
+  currentMode = "registerParent";
+  toggleCameraVisibility(true);
 $("modeContent").innerHTML = `
   <h3>Register / Update Parent</h3>
 
@@ -937,6 +940,7 @@ document.addEventListener("DOMContentLoaded", async () => {
 window._pickupDebug = {
   startCamera, stopCamera, startDetectionLoop, buildMatcherFromDB, fetchAudits, showRecentAudits
 };
+
 
 
 
