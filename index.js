@@ -482,28 +482,70 @@ function toggleCameraVisibility(show) {
   overlay.style.display = show ? "block" : "none";
 }
 
-async function loadRegisterParent() {
-  currentMode = "registerParent";
-  toggleCameraVisibility(true);
-  $("modeContent").innerHTML = `
-    <h3>Register Parent</h3>
-    <label>Parent Name</label><input id="parentName" placeholder="name (lowercase will be saved)" />
-    <!--<label>Role</label><select id="parentRole"><option>father</option><option>mother</option><option>guardian</option></select>-->
-    <div style="margin-top:8px;"><button id="registerBtn" disabled>Register</button></div>
-  `;
-  await startCamera();
-  $("registerBtn").onclick = async () => {
-    const name = $("parentName").value.trim().toLowerCase();
-    //const role = $("parentRole").value.trim().toLowerCase();
-    if (!name) return alert("Enter parent name");
-    if (!lastDetection || !lastDetection.descriptor) return alert("No face detected");
-    const desc = Array.from(lastDetection.descriptor);
-    await window.dbAPI.addUser({ id: Date.now().toString(), name, descriptor: desc });
-    await buildMatcherFromDB();
-    await updateStats();
-    alert("Parent registered");
-  };
-}
+$("modeContent").innerHTML = `
+  <h3>Register / Update Parent</h3>
+
+  <label>Select Parent to Update (optional):</label><br/>
+  <select id="parentSelect" style="margin-bottom:10px;width:60%;">
+    <option value="">-- New Parent --</option>
+  </select><br/>
+
+  <label>Parent Name:</label><br/>
+  <input type="text" id="parentName" placeholder="Enter parent name" style="width:60%;" /><br/><br/>
+  
+  <label>Phone:</label><br/>
+  <input type="text" id="parentPhone" placeholder="Enter phone number" style="width:60%;" /><br/><br/>
+
+  <button id="registerParentBtn">Save Parent</button>
+  <div id="parentStatus"></div>
+`;
+
+const parentSelect = $("parentSelect");
+const parents = await window.dbAPI.getAllParents();
+
+// populate dropdown
+parentSelect.innerHTML += parents
+  .map(p => `<option value="${p.id}">${p.name.replaceAll("_", " ")}</option>`)
+  .join("");
+
+// when selecting an existing parent, autofill form
+parentSelect.onchange = () => {
+  const selectedId = parentSelect.value;
+  if (!selectedId) {
+    $("parentName").value = "";
+    $("parentPhone").value = "";
+    return;
+  }
+  const parent = parents.find(p => p.id === selectedId);
+  if (parent) {
+    $("parentName").value = parent.name.replaceAll("_", " ");
+    $("parentPhone").value = parent.phone || "";
+  }
+};
+
+// Save / Update logic
+$("registerParentBtn").onclick = async () => {
+  const name = $("parentName").value.trim().toLowerCase().replaceAll(" ", "_");
+  const phone = $("parentPhone").value.trim();
+
+  if (!name) {
+    alert("⚠️ Please enter parent name");
+    return;
+  }
+
+  const selectedId = parentSelect.value;
+  const id = selectedId || Date.now().toString();
+
+  const parent = { id, name, phone };
+
+  await window.dbAPI.addParent(parent); // addParent() should use put() so it updates if exists
+  $("parentStatus").innerHTML = `<p style="color:green;">✅ Parent record saved successfully.</p>`;
+
+  // refresh dropdown
+  const updatedList = await window.dbAPI.getAllParents();
+  parentSelect.innerHTML = `<option value="">-- New Parent --</option>` +
+    updatedList.map(p => `<option value="${p.id}">${p.name.replaceAll("_", " ")}</option>`).join("");
+};
 
 async function loadClassManager() {
   currentMode = "classManager";
@@ -895,6 +937,7 @@ document.addEventListener("DOMContentLoaded", async () => {
 window._pickupDebug = {
   startCamera, stopCamera, startDetectionLoop, buildMatcherFromDB, fetchAudits, showRecentAudits
 };
+
 
 
 
