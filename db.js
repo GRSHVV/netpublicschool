@@ -61,7 +61,7 @@ async function addUser(user) {
   return new Promise((resolve, reject) => {
     const tx = dbConn.transaction("parents", "readwrite");
     const store = tx.objectStore("parents");
-    store.add(user);
+    store.put(user);
     tx.oncomplete = () => resolve(true);
     tx.onerror = (e) => reject(e);
   });
@@ -257,5 +257,6 @@ window.dbAPI = {
   getLastAudits,
   getAllAudits, 
 };
+
 
 
