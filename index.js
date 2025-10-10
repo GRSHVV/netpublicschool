@@ -546,14 +546,14 @@ async function loadLinkParentChild() {
   currentMode = "link";
   toggleCameraVisibility(false);
   stopCamera();
-  // We'll render a search+filters UI (assumes db has getAllUsers/getAllChildren/getAllClasses/getAllSections)
+
   const parents = await window.dbAPI.getAllUsers();
   const children = await window.dbAPI.getAllChildren();
   const classes = await window.dbAPI.getAllClasses();
   const sections = await window.dbAPI.getAllSections();
 
   $("modeContent").innerHTML = `
-    <h3>Link Parent & Child</h3>
+    <h3>Link Parent & Child (with Relation)</h3>
     <div style="max-width:700px;">
       <div><label>Parent (type first 3 letters)</label><input id="parentSearch" placeholder="type at least 3 letters" /></div>
       <div><select id="parentSelect" size="6" style="width:100%;"></select></div>
@@ -561,8 +561,14 @@ async function loadLinkParentChild() {
         <select id="filterClass"><option value="">All Classes</option>${classes.map(c=>`<option>${escapeHtml(c.className)}</option>`).join("")}</select>
         <select id="filterSection"><option value="">All Sections</option>${sections.map(s=>`<option>${escapeHtml(s.sectionName)}</option>`).join("")}</select>
       </div>
-      <div style="margin-top:8px;"><select id="childSelect" multiple size="8" style="width:100%;">${children.map(ch => `<option value="${ch.id}">${escapeHtml(ch.name)} (${escapeHtml(ch.class)}-${escapeHtml(ch.section)})</option>`).join("")}</select></div>
-      <div style="margin-top:8px;"><button id="linkBtn">Link Selected</button></div>
+      <div style="margin-top:8px;">
+        <select id="childSelect" multiple size="8" style="width:100%;">
+          ${children.map(ch => `<option value="${ch.id}">${escapeHtml(ch.name)} (${escapeHtml(ch.class)}-${escapeHtml(ch.section)})</option>`).join("")}
+        </select>
+      </div>
+
+      <div id="relationContainer" style="margin-top:10px;"></div>
+      <div style="margin-top:10px;"><button id="linkBtn">Link Selected</button></div>
     </div>
   `;
 
@@ -571,6 +577,7 @@ async function loadLinkParentChild() {
   const classFilterEl = $("filterClass");
   const sectionFilterEl = $("filterSection");
   const childSelectEl = $("childSelect");
+  const relationContainer = $("relationContainer");
 
   parentSearchEl.oninput = () => {
     const term = parentSearchEl.value.trim().toLowerCase();
@@ -579,7 +586,9 @@ async function loadLinkParentChild() {
       return;
     }
     const matches = parents.filter(p => p.name.startsWith(term));
-    parentSelectEl.innerHTML = matches.map(m => `<option value="${m.id}">${escapeHtml(m.name)} (${escapeHtml(m.role)})</option>`).join("") || "<option disabled>No matches</option>";
+    parentSelectEl.innerHTML = matches
+      .map(m => `<option value="${m.id}">${escapeHtml(m.name)}</option>`)
+      .join("") || "<option disabled>No matches</option>";
   };
 
   function applyChildFilters() {
@@ -588,19 +597,59 @@ async function loadLinkParentChild() {
     let list = children;
     if (cls) list = list.filter(c => c.class === cls);
     if (sec) list = list.filter(c => c.section === sec);
-    childSelectEl.innerHTML = list.map(c => `<option value="${c.id}">${escapeHtml(c.name)} (${escapeHtml(c.class)}-${escapeHtml(c.section)})</option>`).join("");
+    childSelectEl.innerHTML = list
+      .map(c => `<option value="${c.id}">${escapeHtml(c.name)} (${escapeHtml(c.class)}-${escapeHtml(c.section)})</option>`)
+      .join("");
   }
 
   classFilterEl.onchange = applyChildFilters;
   sectionFilterEl.onchange = applyChildFilters;
 
+  // When child selection changes → show relation dropdowns
+  childSelectEl.onchange = () => {
+    const selected = Array.from(childSelectEl.selectedOptions);
+    if (!selected.length) {
+      relationContainer.innerHTML = "";
+      return;
+    }
+
+    relationContainer.innerHTML = `
+      <h4 style="margin-bottom:6px;">Select Relation(s):</h4>
+      ${selected.map(
+        (opt) => `
+        <div style="margin:3px 0;">
+          <label>${escapeHtml(opt.textContent)}:</label>
+          <select class="relationSelect" data-child="${opt.value}" style="margin-left:6px;">
+            <option value="father">Father</option>
+            <option value="mother">Mother</option>
+            <option value="guardian">Guardian</option>
+          </select>
+        </div>`
+      ).join("")}
+    `;
+  };
+
   $("linkBtn").onclick = async () => {
     const pid = parentSelectEl.value;
-    const kids = Array.from(childSelectEl.selectedOptions).map(o => o.value);
-    if (!pid) return alert("Select parent");
-    if (kids.length === 0) return alert("Select children");
-    await window.dbAPI.addLink({ id: Date.now().toString(), parentId: pid, childrenIds: kids });
-    alert("Linked");
+    const selectedRelations = Array.from(document.querySelectorAll(".relationSelect")).map(sel => ({
+      childId: sel.dataset.child,
+      relation: sel.value
+    }));
+
+    if (!pid) return alert("Select a parent");
+    if (!selectedRelations.length) return alert("Select at least one child and relation");
+
+    // Save each link record individually
+    for (const rel of selectedRelations) {
+      await window.dbAPI.addLink({
+        id: Date.now().toString() + Math.random(),
+        parentId: pid,
+        childId: rel.childId,
+        relation: rel.relation
+      });
+    }
+
+    alert("✅ Parent–Child link(s) saved successfully!");
   };
 }
 
@@ -870,6 +919,7 @@ document.addEventListener("DOMContentLoaded", async () => {
 window._pickupDebug = {
   startCamera, stopCamera, startDetectionLoop, buildMatcherFromDB, fetchAudits, showRecentAudits
 };
+
 
 
 
