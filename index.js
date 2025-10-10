@@ -809,7 +809,7 @@ async function loadReports() {
     URL.revokeObjectURL(a.href);
   };
 };
-
+}
 
 /* ======= Data Export / Import ======= */
 /* ======= Export Data (ZIP) – fixed ======= */
@@ -964,6 +964,7 @@ document.addEventListener("DOMContentLoaded", async () => {
 window._pickupDebug = {
   startCamera, stopCamera, startDetectionLoop, buildMatcherFromDB, fetchAudits, showRecentAudits
 };
+
 
 
 
