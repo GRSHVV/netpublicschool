@@ -3,7 +3,7 @@
    ============================================================ */
 
 const DB_NAME = "SmartPickupDB";
-const DB_VERSION = 5;
+const DB_VERSION = 6;
 let db;
 
 function openDB() {
@@ -42,7 +42,10 @@ function openDB() {
       if (!db.objectStoreNames.contains("links")) {
         const store = db.createObjectStore("links", { keyPath: "id" });
         store.createIndex("parentId", "parentId", { unique: false });
+        store.createIndex("childId", "childId", { unique: false });
+        store.createIndex("relation", "relation", { unique: false });
       }
+
 
       if (!db.objectStoreNames.contains("audits")) {
         const store = db.createObjectStore("audits", { keyPath: "id" });
@@ -87,7 +90,7 @@ async function addChild(child) {
   return new Promise((resolve, reject) => {
     const tx = dbConn.transaction("children", "readwrite");
     const store = tx.objectStore("children");
-    store.add(child);
+    store.put(child);
     tx.oncomplete = () => resolve(true);
     tx.onerror = (e) => reject(e);
   });
@@ -180,10 +183,27 @@ async function addLink(linkObj) {
   const dbConn = await openDB();
   return new Promise((resolve, reject) => {
     const tx = dbConn.transaction("links", "readwrite");
-    tx.objectStore("links").add(linkObj);
+    const store = tx.objectStore("links");
+
+    // Ensure link has id and relation
+    if (!linkObj.id) linkObj.id = Date.now().toString();
+    if (!linkObj.relation) linkObj.relation = "guardian";
+
+    store.put(linkObj); // ✅ upsert
     tx.oncomplete = () => resolve(true);
     tx.onerror = (e) => reject(e);
   });
+}
+// Get all children linked to a specific parent
+async function getChildrenByParent(parentId) {
+  const links = await getAllLinks();
+  return links.filter(l => l.parentId === parentId);
+}
+
+// Get all parents linked to a specific child
+async function getParentsByChild(childId) {
+  const links = await getAllLinks();
+  return links.filter(l => l.childId === childId);
 }
 
 async function getAllLinks() {
@@ -242,7 +262,7 @@ async function getLastAudits(limit = 10) {
    ============================================================ */
 
 window.dbAPI = {
-  openDB, // ✅ ensure this line exists
+  openDB,
   addUser,
   getAllUsers,
   addChild,
@@ -253,10 +273,13 @@ window.dbAPI = {
   getAllSections,
   addLink,
   getAllLinks,
+  getChildrenByParent,   // ✅ new
+  getParentsByChild,     // ✅ new
   addAudit,
   getLastAudits,
-  getAllAudits, 
+  getAllAudits,
 };
+
 
 
 
