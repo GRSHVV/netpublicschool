@@ -318,11 +318,15 @@ function startDetectionLoop() {
 
         const links = await window.dbAPI.getAllLinks();
         const children = await window.dbAPI.getAllChildren();
+
+        // Each link has: { parentId, childId, relation }
         const linked = links
           .filter(l => l.parentId === parent.id)
-          .flatMap(l => l.childrenIds || [])
-          .map(id => children.find(c => c.id === id))
-          .filter(Boolean);
+          .map(link => {
+        const c = children.find(ch => ch.id === link.childId);
+        return c ? { ...c, relation: link.relation || "guardian" } : null;
+      })
+      .filter(Boolean);
 
         // No children linked -> yellow
         if (!linked || linked.length === 0) {
@@ -360,13 +364,13 @@ function startDetectionLoop() {
         // Build child checklist UI
         const kidsHtml = linked.map(c => `
           <label style="display:block;margin:3px 0;">
-            <input type="checkbox" class="pickupChild" value="${c.id}">
-            ${escapeHtml(c.name)} (${escapeHtml(c.class)}-${escapeHtml(c.section)})
+          <input type="checkbox" class="pickupChild" value="${c.id}">
+          ${escapeHtml(c.name)} (${escapeHtml(c.class)}-${escapeHtml(c.section)}) — 
+          <em>${escapeHtml(c.relation)}</em>
           </label>`).join("");
 
         if (resultDiv) resultDiv.innerHTML = `
           <p style="color:#22c55e;font-weight:bold;">✅ Recognized: ${escapeHtml(parent.name)}</p>
-          <p style="margin-top:-6px;">Relation: <strong>${escapeHtml(parent.role)}</strong></p>
           <p>Linked Children:</p>
           <div style="max-height:140px;overflow-y:auto;border:1px solid #ddd;padding:6px;border-radius:6px;">
             ${kidsHtml}
@@ -411,16 +415,18 @@ function startDetectionLoop() {
             // save audits
             for (const chId of selectedIds) {
               const ch = linked.find(x => x.id === chId);
+              const link = links.find(l => l.parentId === parent.id && l.childId === ch.id);
               await window.dbAPI.addAudit({
                 id: Date.now().toString() + Math.random(),
                 parentName: parent.name,
-                relation: parent.role,
+                relation: link?.relation || "guardian",
                 childName: ch.name,
                 class: ch.class,
                 section: ch.section,
                 pickupTime: formatted,
                 timestamp: Date.now()
               });
+
             }
 
             // show confirmation
@@ -714,57 +720,96 @@ async function loadReports() {
     .join("");
 
   $("runReport").onclick = async () => {
-    const from = $("reportFrom").value ? new Date($("reportFrom").value).getTime() : 0;
-    const to = $("reportTo").value ? new Date($("reportTo").value).getTime() + 86400000 : Date.now();
-    const cls = $("reportClass").value;
-    const sec = $("reportSection").value;
+  const from = $("reportFrom").value ? new Date($("reportFrom").value).getTime() : 0;
+  const to = $("reportTo").value ? new Date($("reportTo").value).getTime() + 86400000 : Date.now();
+  const cls = $("reportClass").value;
+  const sec = $("reportSection").value;
 
-    const audits = await window.dbAPI.getAllAudits();
+  const audits = await window.dbAPI.getAllAudits();
+  const links = await window.dbAPI.getAllLinks();
 
-    const filtered = audits.filter((a) => {
-      const time = a.timestamp || new Date(a.pickupTime).getTime();
-      const matchDate = time >= from && time <= to;
-      const matchClass = !cls || (a.class && a.class === cls);
-      const matchSec = !sec || (a.section && a.section === sec);
-      return matchDate && matchClass && matchSec;
-    });
+  // Apply date/class/section filters
+  const filtered = audits.filter((a) => {
+    const time = a.timestamp || new Date(a.pickupTime).getTime();
+    const matchDate = time >= from && time <= to;
+    const matchClass = !cls || (a.class && a.class === cls);
+    const matchSec = !sec || (a.section && a.section === sec);
+    return matchDate && matchClass && matchSec;
+  });
 
-    if (!filtered.length) {
-      $("reportResults").innerHTML = `<p style="color:#999">No records found for selected filters.</p>`;
-      return;
-    }
+  if (!filtered.length) {
+    $("reportResults").innerHTML = `<p style="color:#999">No records found for selected filters.</p>`;
+    return;
+  }
 
-    const rows = filtered
-      .map(
-        (r) => `
+  // Enrich with relation (fallback to link if missing)
+  const enriched = filtered.map(a => {
+    if (a.relation) return a; // already has relation
+    const link = links.find(
+      l =>
+        (l.parentId === a.parentId || a.parentName?.toLowerCase().includes(l.parentId?.toLowerCase() || "")) &&
+        (l.childId === a.childId || a.childName?.toLowerCase().includes(l.childId?.toLowerCase() || ""))
+    );
+    return { ...a, relation: link?.relation || "guardian" };
+  });
+
+  // Build table rows
+  const rows = enriched
+    .map(
+      (r) => `
       <tr>
         <td>${r.pickupTime || new Date(r.timestamp).toLocaleString()}</td>
-        <td>${r.parentName || "-"}</td>
-        <td>${r.childName || "-"}</td>
-        <td>${r.class || "-"}</td>
-        <td>${r.section || "-"}</td>
-        <td>${r.relation || "-"}</td>
+        <td>${escapeHtml(r.parentName || "-")}</td>
+        <td>${escapeHtml(r.childName || "-")}</td>
+        <td>${escapeHtml(r.class || "-")}</td>
+        <td>${escapeHtml(r.section || "-")}</td>
+        <td>${escapeHtml(r.relation || "-")}</td>
       </tr>`
-      )
-      .join("");
+    )
+    .join("");
 
-    $("reportResults").innerHTML = `
-      <table id="reportTable">
-        <thead>
-          <tr>
-            <th>Date/Time</th>
-            <th>Parent</th>
-            <th>Child</th>
-            <th>Class</th>
-            <th>Section</th>
-            <th>Relation</th>
-          </tr>
-        </thead>
-        <tbody>${rows}</tbody>
-      </table>
-    `;
+  $("reportResults").innerHTML = `
+    <table id="reportTable" style="width:100%;border-collapse:collapse;">
+      <thead>
+        <tr style="background:#f8fafc;">
+          <th>Date/Time</th>
+          <th>Parent</th>
+          <th>Child</th>
+          <th>Class</th>
+          <th>Section</th>
+          <th>Relation</th>
+        </tr>
+      </thead>
+      <tbody>${rows}</tbody>
+    </table>
+    <div style="margin-top:10px;">
+      <button id="downloadCsvBtn">⬇️ Download CSV</button>
+    </div>
+  `;
+
+  // CSV Export
+  $("downloadCsvBtn").onclick = () => {
+    const csvRows = [
+      ["Date/Time", "Parent", "Child", "Class", "Section", "Relation"],
+      ...enriched.map(r => [
+        r.pickupTime || new Date(r.timestamp).toLocaleString(),
+        r.parentName || "-",
+        r.childName || "-",
+        r.class || "-",
+        r.section || "-",
+        r.relation || "-"
+      ])
+    ];
+    const csv = csvRows.map(r => r.map(v => `"${v}"`).join(",")).join("\n");
+    const blob = new Blob([csv], { type: "text/csv" });
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(blob);
+    a.download = `audit_report_${new Date().toISOString().split("T")[0]}.csv`;
+    a.click();
+    URL.revokeObjectURL(a.href);
   };
-}
+};
+
 
 /* ======= Data Export / Import ======= */
 /* ======= Export Data (ZIP) – fixed ======= */
@@ -919,6 +964,7 @@ document.addEventListener("DOMContentLoaded", async () => {
 window._pickupDebug = {
   startCamera, stopCamera, startDetectionLoop, buildMatcherFromDB, fetchAudits, showRecentAudits
 };
+
 
 
 
