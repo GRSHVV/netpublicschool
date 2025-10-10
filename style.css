@@ -304,6 +304,30 @@ li {
 #importForm button:hover {
   opacity: 0.9;
 }
+/* ===============================
+   Footer Styles
+   =============================== */
+#appFooter {
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  width: 100%;
+  background: #0f172a;  /* dark navy blue */
+  color: #f8fafc;       /* soft white */
+  text-align: center;
+  padding: 8px 0;
+  font-size: 0.9rem;
+  letter-spacing: 0.5px;
+  z-index: 1000;
+  box-shadow: 0 -1px 3px rgba(0,0,0,0.15);
+}
+
+/* Prevent footer from overlapping scrollable content */
+body {
+  margin-bottom: 50px; /* adjust if needed */
+}
+
+
 
 
 
