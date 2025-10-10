@@ -229,6 +229,72 @@ async function buildMatcherFromDB() {
     console.error("buildMatcherFromDB error", e);
   }
 }
+/* -----------------------
+   DASHBOARD SCREEN
+   ----------------------- */
+async function loadDashboard() {
+  currentMode = "dashboard";
+  toggleCameraVisibility(false);
+  stopCamera();
+
+  const parents = await window.dbAPI.getAllUsers();
+  const children = await window.dbAPI.getAllChildren();
+  const links = await window.dbAPI.getAllLinks();
+  const classes = await window.dbAPI.getAllClasses();
+  const sections = await window.dbAPI.getAllSections();
+
+  // Build grade × section summary
+  const grid = [];
+  for (const c of classes) {
+    for (const s of sections) {
+      const childrenInGroup = children.filter(ch => ch.class === c.className && ch.section === s.sectionName);
+      const childCount = childrenInGroup.length;
+
+      // count distinct linked parents
+      const linkedParentIds = links
+        .filter(l => childrenInGroup.some(ch => ch.id === l.childId))
+        .map(l => l.parentId);
+      const uniqueParentCount = [...new Set(linkedParentIds)].length;
+
+      grid.push({
+        class: c.className,
+        section: s.sectionName,
+        children: childCount,
+        linkedParents: uniqueParentCount
+      });
+    }
+  }
+
+  $("modeContent").innerHTML = `
+    <h3>🏫 School Dashboard</h3>
+    <div style="display:flex;gap:20px;margin-bottom:15px;flex-wrap:wrap;">
+      <div style="background:#f1f5f9;padding:10px 16px;border-radius:8px;">👨‍👩‍👧‍👦 Parents: <strong>${parents.length}</strong></div>
+      <div style="background:#f1f5f9;padding:10px 16px;border-radius:8px;">🧒 Children: <strong>${children.length}</strong></div>
+      <div style="background:#f1f5f9;padding:10px 16px;border-radius:8px;">🔗 Links: <strong>${links.length}</strong></div>
+    </div>
+    <div style="overflow:auto;max-height:350px;">
+      <table style="width:100%;border-collapse:collapse;">
+        <thead>
+          <tr style="background:#e2e8f0;">
+            <th style="text-align:left;padding:6px;">Class</th>
+            <th style="text-align:left;padding:6px;">Section</th>
+            <th style="text-align:right;padding:6px;">Children</th>
+            <th style="text-align:right;padding:6px;">Linked Parents</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${grid.map(g => `
+            <tr>
+              <td style="padding:6px;">${escapeHtml(g.class)}</td>
+              <td style="padding:6px;">${escapeHtml(g.section)}</td>
+              <td style="padding:6px;text-align:right;">${g.children}</td>
+              <td style="padding:6px;text-align:right;">${g.linkedParents}</td>
+            </tr>`).join("")}
+        </tbody>
+      </table>
+    </div>
+  `;
+}
 
 /* -----------------------
    THE DETECTION / RECOGNITION LOOP
@@ -484,6 +550,8 @@ async function loadRegisterParent() {
     await buildMatcherFromDB();
     await updateStats();
     alert("Parent registered");
+    await loadDashboard();
+
   };
 }
 
@@ -504,6 +572,8 @@ async function loadClassManager() {
     await window.dbAPI.addClassEntry({ id: Date.now().toString(), className: v });
     $("classInput").value = "";
     refreshClassSectionLists();
+    await loadDashboard();
+
   };
   $("addSectionBtn").onclick = async () => {
     const v = $("sectionInput").value.trim().toLowerCase();
@@ -511,6 +581,7 @@ async function loadClassManager() {
     await window.dbAPI.addSectionEntry({ id: Date.now().toString(), sectionName: v });
     $("sectionInput").value = "";
     refreshClassSectionLists();
+    await loadDashboard();
   };
   refreshClassSectionLists();
 }
@@ -545,6 +616,9 @@ async function loadRegisterChild() {
     await window.dbAPI.addChild({ id: Date.now().toString(), name, class: cls, section: sec });
     await updateStats();
     alert("Child added");
+    await loadDashboard();
+
+    
   };
 }
 
@@ -656,6 +730,8 @@ async function loadLinkParentChild() {
     }
 
     alert("✅ Parent–Child link(s) saved successfully!");
+    await loadDashboard();
+
   };
 }
 
@@ -928,6 +1004,8 @@ function setupMenu() {
   safeBind("btnReports", loadReports);
   safeBind("btnExport", exportDataZip);
   safeBind("btnImport", importDataZip);
+  safeBind("btnDashboard", loadDashboard);
+
   
 }
 
@@ -955,6 +1033,8 @@ document.addEventListener("DOMContentLoaded", async () => {
   await populateCameraList();
   await buildMatcherFromDB();
   await updateStats();
+  await loadDashboard();
+
   setStatus("App ready");
 });
 
@@ -964,6 +1044,7 @@ document.addEventListener("DOMContentLoaded", async () => {
 window._pickupDebug = {
   startCamera, stopCamera, startDetectionLoop, buildMatcherFromDB, fetchAudits, showRecentAudits
 };
+
 
 
 
