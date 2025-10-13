@@ -80,6 +80,19 @@ async function getAllUsers() {
     request.onerror = (e) => reject(e);
   });
 }
+/* ============================================================
+   UPDATE PARENT (USER)
+   ============================================================ */
+async function updateUser(updatedParent) {
+  const dbConn = await openDB();
+  return new Promise((resolve, reject) => {
+    const tx = dbConn.transaction("parents", "readwrite");
+    const store = tx.objectStore("parents");
+    const req = store.put(updatedParent);
+    req.onsuccess = () => resolve(true);
+    req.onerror = (e) => reject(e);
+  });
+}
 
 /* ============================================================
    CHILD OPERATIONS
@@ -265,6 +278,7 @@ window.dbAPI = {
   openDB,
   addUser,
   getAllUsers,
+  updateUser, 
   addChild,
   getAllChildren,
   addClassEntry,
@@ -279,6 +293,7 @@ window.dbAPI = {
   getLastAudits,
   getAllAudits,
 };
+
 
 
 
