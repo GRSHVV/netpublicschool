@@ -550,7 +550,7 @@ async function loadRegisterParent() {
     await buildMatcherFromDB();
     await updateStats();
     alert("Parent registered");
-    await loadDashboard();
+    //await loadDashboard();
 
   };
 }
@@ -630,7 +630,7 @@ async function loadUpdateParent() {
     await window.dbAPI.updateUser({ ...parent, name: newName, descriptor: updatedDesc });
     await buildMatcherFromDB();
     alert("✅ Parent details updated successfully");
-    await loadDashboard();
+    //await loadDashboard();
   };
 }
 
@@ -653,7 +653,7 @@ async function loadClassManager() {
     await window.dbAPI.addClassEntry({ id: Date.now().toString(), className: v });
     $("classInput").value = "";
     refreshClassSectionLists();
-    await loadDashboard();
+    //await loadDashboard();
 
   };
   $("addSectionBtn").onclick = async () => {
@@ -662,7 +662,7 @@ async function loadClassManager() {
     await window.dbAPI.addSectionEntry({ id: Date.now().toString(), sectionName: v });
     $("sectionInput").value = "";
     refreshClassSectionLists();
-    await loadDashboard();
+    //await loadDashboard();
   };
   refreshClassSectionLists();
 }
@@ -697,7 +697,7 @@ async function loadRegisterChild() {
     await window.dbAPI.addChild({ id: Date.now().toString(), name, class: cls, section: sec });
     await updateStats();
     alert("Child added");
-    await loadDashboard();
+   // await loadDashboard();
 
     
   };
@@ -811,7 +811,7 @@ async function loadLinkParentChild() {
     }
 
     alert("✅ Parent–Child link(s) saved successfully!");
-    await loadDashboard();
+    //await loadDashboard();
 
   };
 }
@@ -1127,6 +1127,7 @@ document.addEventListener("DOMContentLoaded", async () => {
 window._pickupDebug = {
   startCamera, stopCamera, startDetectionLoop, buildMatcherFromDB, fetchAudits, showRecentAudits
 };
+
 
 
 
