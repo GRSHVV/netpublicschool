@@ -80,10 +80,31 @@ async function getAllUsers() {
     request.onerror = (e) => reject(e);
   });
 }
+async function getAllParents() {
+  const dbConn = await openDB();
+  return new Promise((resolve, reject) => {
+    const tx = dbConn.transaction("parents", "readonly");
+    const store = tx.objectStore("parents");
+    const request = store.getAll();
+    request.onsuccess = () => resolve(request.result || []);
+    request.onerror = (e) => reject(e);
+  });
+}
+
 /* ============================================================
    UPDATE PARENT (USER)
    ============================================================ */
 async function updateUser(updatedParent) {
+  const dbConn = await openDB();
+  return new Promise((resolve, reject) => {
+    const tx = dbConn.transaction("parents", "readwrite");
+    const store = tx.objectStore("parents");
+    const req = store.put(updatedParent);
+    req.onsuccess = () => resolve(true);
+    req.onerror = (e) => reject(e);
+  });
+}
+async function updateParent(updatedParent) {
   const dbConn = await openDB();
   return new Promise((resolve, reject) => {
     const tx = dbConn.transaction("parents", "readwrite");
@@ -278,6 +299,7 @@ window.dbAPI = {
   openDB,
   addUser,
   getAllUsers,
+  getAllParents,
   updateUser, 
   addChild,
   getAllChildren,
@@ -293,6 +315,7 @@ window.dbAPI = {
   getLastAudits,
   getAllAudits,
 };
+
 
 
 
