@@ -554,6 +554,87 @@ async function loadRegisterParent() {
 
   };
 }
+/* ============================================================
+   UPDATE EXISTING PARENT DETAILS OR FACE
+   ============================================================ */
+async function loadUpdateParent() {
+  currentMode = "updateParent";
+  toggleCameraVisibility(true);
+  $("modeContent").innerHTML = `
+    <h3>Update Parent</h3>
+    <label>Search Parent (type 3 letters):</label>
+    <input id="searchParentInput" placeholder="type at least 3 letters" />
+    <select id="parentSelect" size="6" style="width:100%;margin-top:8px;"></select>
+    <label style="margin-top:8px;">New Name (optional):</label>
+    <input id="newParentName" placeholder="leave empty if name not changing" />
+    <div style="margin-top:10px;">
+      <button id="updateFaceBtn" disabled>Update Face</button>
+      <button id="saveParentUpdateBtn" style="margin-left:8px;">Save</button>
+    </div>
+  `;
+
+  await startCamera();
+  const parents = await window.dbAPI.getAllUsers();
+
+  const searchInput = $("searchParentInput");
+  const selectEl = $("parentSelect");
+  const updateBtn = $("updateFaceBtn");
+  const saveBtn = $("saveParentUpdateBtn");
+
+  // Search parent
+  searchInput.oninput = () => {
+    const term = searchInput.value.trim().toLowerCase();
+    if (term.length < 3) {
+      selectEl.innerHTML = "<option disabled>Type at least 3 letters...</option>";
+      return;
+    }
+    const matches = parents.filter(p => p.name.startsWith(term));
+    selectEl.innerHTML = matches.map(m => `<option value="${m.id}">${escapeHtml(m.name)}</option>`).join("") || "<option disabled>No matches</option>";
+  };
+
+  // Enable update button when a face is detected
+  detectionInterval && clearInterval(detectionInterval);
+  const options = new faceapi.TinyFaceDetectorOptions({ inputSize: 224, scoreThreshold: 0.4 });
+  detectionInterval = setInterval(async () => {
+    if (!video || video.readyState < 2) return;
+    const detection = await faceapi.detectSingleFace(video, options).withFaceLandmarks().withFaceDescriptor();
+    ctx.clearRect(0, 0, overlay.width, overlay.height);
+    if (detection) {
+      const box = detection.detection.box;
+      ctx.strokeStyle = "yellow";
+      ctx.lineWidth = 2;
+      ctx.strokeRect(box.x, box.y, box.width, box.height);
+      lastDetection = detection;
+      updateBtn.disabled = false;
+    } else {
+      updateBtn.disabled = true;
+    }
+  }, 800);
+
+  // Save face descriptor when clicked
+  updateBtn.onclick = () => {
+    if (!lastDetection || !lastDetection.descriptor) return alert("No face detected!");
+    alert("✅ Face captured. Click Save to update record.");
+  };
+
+  // Save updated record
+  saveBtn.onclick = async () => {
+    const selectedId = selectEl.value;
+    if (!selectedId) return alert("Select a parent");
+    const parent = parents.find(p => p.id === selectedId);
+    if (!parent) return alert("Parent not found");
+
+    const newName = $("newParentName").value.trim().toLowerCase() || parent.name;
+    const updatedDesc = lastDetection?.descriptor ? Array.from(lastDetection.descriptor) : parent.descriptor;
+
+    await window.dbAPI.updateUser({ ...parent, name: newName, descriptor: updatedDesc });
+    await buildMatcherFromDB();
+    alert("✅ Parent details updated successfully");
+    await loadDashboard();
+  };
+}
+
+
 
 async function loadClassManager() {
   currentMode = "classManager";
@@ -1005,6 +1086,8 @@ function setupMenu() {
   safeBind("btnExport", exportDataZip);
   safeBind("btnImport", importDataZip);
   safeBind("btnDashboard", loadDashboard);
+  safeBind("btnUpdateParent", loadUpdateParent);
+
 
   
 }
@@ -1044,6 +1127,7 @@ document.addEventListener("DOMContentLoaded", async () => {
 window._pickupDebug = {
   startCamera, stopCamera, startDetectionLoop, buildMatcherFromDB, fetchAudits, showRecentAudits
 };
+
 
 
 
