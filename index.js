@@ -72,7 +72,29 @@ async function loadFaceModels() {
     alert("Failed to load face models. Check ./models paths and network.");
   }
 }
+/* ============================================================
+   Helper: Check if audit exists for same parent–child on same day
+   ============================================================ */
+async function auditExistsToday(parentName, childName) {
+  try {
+    const all = await window.dbAPI.getAllAudits();
+    if (!Array.isArray(all)) return false;
 
+    const today = new Date();
+    const startOfDay = new Date(today.getFullYear(), today.getMonth(), today.getDate()).getTime();
+    const endOfDay = startOfDay + 86400000; // +24h
+
+    return all.some(a =>
+      a.parentName === parentName &&
+      a.childName === childName &&
+      a.timestamp >= startOfDay &&
+      a.timestamp < endOfDay
+    );
+  } catch (err) {
+    console.warn("auditExistsToday failed:", err);
+    return false;
+  }
+}
 /* -----------------------
    Camera utils
    ----------------------- */
