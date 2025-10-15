@@ -84,17 +84,24 @@ async function auditExistsToday(parentName, childName) {
     const startOfDay = new Date(today.getFullYear(), today.getMonth(), today.getDate()).getTime();
     const endOfDay = startOfDay + 86400000; // +24h
 
-    return all.some(a =>
-      a.parentName === parentName &&
-      a.childName === childName &&
-      a.timestamp >= startOfDay &&
-      a.timestamp < endOfDay
-    );
+    for (const a of all) {
+      if (
+        a.parentName === parentName &&
+        a.childName === childName &&
+        a.timestamp >= startOfDay &&
+        a.timestamp < endOfDay
+      ) {
+        return true;
+      }
+    }
+    return false;
   } catch (err) {
     console.warn("auditExistsToday failed:", err);
     return false;
   }
 }
+
+
 /* -----------------------
    Camera utils
    ----------------------- */
