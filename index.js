@@ -450,10 +450,10 @@ function startDetectionLoop() {
         const now = Date.now();
 
         // Avoid duplicate logging for the same parent within 10 seconds
-        if (parent.id === lastRecognizedParentId && (now - lastRecognitionTime) < 43200000) {
-          if (resultDiv) resultDiv.innerHTML = `<p style="color:#22c55e;">Recognized ${escapeHtml(parent.name)} — already logged.</p>`;
-          return;
-        }
+        //if (parent.id === lastRecognizedParentId && (now - lastRecognitionTime) < 43200000) {
+        //  if (resultDiv) resultDiv.innerHTML = `<p style="color:#22c55e;">Recognized ${escapeHtml(parent.name)} — already logged.</p>`;
+        //  return;
+        //}
       
         // Update last recognized parent
         lastRecognizedParentId = parent.id;
@@ -462,6 +462,7 @@ function startDetectionLoop() {
         // Auto-generate audit records for all linked children
         if (linked && linked.length > 0) {
           const formatted = new Date().toLocaleString();
+          let newCount = 0;
           for (const ch of linked) {
             auditExistsAlready = auditExistsToday(parent.name,ch.name);
             if(!auditExistsAlready){
@@ -475,14 +476,17 @@ function startDetectionLoop() {
                 pickupTime: formatted,
                 timestamp: Date.now()
               });
+              newCount++;
             }
             
           }
-          playBeep(100, 1200, "sine");
-          if (resultDiv)
-            resultDiv.innerHTML = `<p style="color:#22c55e;font-weight:bold;">✅ ${escapeHtml(parent.name)} recognized — ${linked.length} pickup(s) logged automatically.</p>`;
-          await showRecentAudits();
-        } else {
+          if(newCount > 0){ //new audit record added 
+            playBeep(100, 1200, "sine");
+            if (resultDiv)
+              resultDiv.innerHTML = `<p style="color:#22c55e;font-weight:bold;">✅ ${escapeHtml(parent.name)} recognized — ${linked.length} pickup(s) logged automatically.</p>`;
+            await showRecentAudits();
+          }  
+        } else { //linked lenth == 0
           if (resultDiv)
             resultDiv.innerHTML = `<p style="color:#facc15;">⚠️ Recognized ${escapeHtml(parent.name)} — but no linked children found.</p>`;
           playBeep(200, 800, "triangle");
