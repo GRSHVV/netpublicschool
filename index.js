@@ -368,7 +368,7 @@ function startDetectionLoop() {
       if (!detection) {
         lastDetection = null;
         if (currentMode === "recognition" && resultDiv) {
-          resultDiv.innerHTML = <p style="opacity:0.6">Show a registered face...</p>;
+          resultDiv.innerHTML = '<p style="opacity:0.6">Show a registered face...</p>';
         }
         $("registerBtn")?.setAttribute("disabled", true);
         return;
@@ -1193,6 +1193,7 @@ document.addEventListener("DOMContentLoaded", async () => {
 window._pickupDebug = {
   startCamera, stopCamera, startDetectionLoop, buildMatcherFromDB, fetchAudits, showRecentAudits
 };
+
 
 
 
