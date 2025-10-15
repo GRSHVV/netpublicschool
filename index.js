@@ -457,10 +457,10 @@ function startDetectionLoop() {
         const now = Date.now();
 
         // Avoid duplicate logging for the same parent within 10 seconds
-        //if (parent.id === lastRecognizedParentId && (now - lastRecognitionTime) < 43200000) {
-        //  if (resultDiv) resultDiv.innerHTML = `<p style="color:#22c55e;">Recognized ${escapeHtml(parent.name)} — already logged.</p>`;
-        //  return;
-        //}
+        if (parent.id === lastRecognizedParentId && (now - lastRecognitionTime) < 43200000) {
+          if (resultDiv) resultDiv.innerHTML = `<p style="color:#22c55e;">Recognized ${escapeHtml(parent.name)} — already logged.</p>`;
+          //return;
+        }
       
         // Update last recognized parent
         lastRecognizedParentId = parent.id;
@@ -473,7 +473,7 @@ function startDetectionLoop() {
           for (const ch of linked) {
             
             alert("parent recognized" + parent.name);
-            auditExistsAlready = auditExistsToday(parent.name,ch.name);
+            auditExistsAlready = await auditExistsToday(parent.name,ch.name);
             alert(auditExistsAlready);
             
             alert("linked child" + ch.name);
