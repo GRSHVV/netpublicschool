@@ -463,16 +463,20 @@ function startDetectionLoop() {
         if (linked && linked.length > 0) {
           const formatted = new Date().toLocaleString();
           for (const ch of linked) {
-            await window.dbAPI.addAudit({
-              id: `${Date.now()}-${Math.random()}`,
-              parentName: parent.name,
-              relation: parent.role || "parent",
-              childName: ch.name,
-              class: ch.class,
-              section: ch.section,
-              pickupTime: formatted,
-              timestamp: Date.now()
-            });
+            auditExistsAlready = auditExistsToday(parent.name,ch.name);
+            if(!auditExistsAlready){
+              await window.dbAPI.addAudit({
+                id: `${Date.now()}-${Math.random()}`,
+                parentName: parent.name,
+                relation: parent.role || "parent",
+                childName: ch.name,
+                class: ch.class,
+                section: ch.section,
+                pickupTime: formatted,
+                timestamp: Date.now()
+              });
+            }
+            
           }
           playBeep(100, 1200, "sine");
           if (resultDiv)
