@@ -330,19 +330,26 @@ async function loadDashboard() {
    * if Continuous is OFF and parent recognized with linked children -> pause detection (so operator can pick)
    * after Mark Pickup clicked -> add audits, set tempNoPickup true (for 10s) to avoid immediate re-showing, resume detection
    ----------------------- */
+/* ============================================================
+   FACE DETECTION + RECOGNITION LOOP
+   ============================================================ */
 function startDetectionLoop() {
-  if (!modelsLoaded) { log("models not loaded yet"); return; }
-  if (detectionInterval) clearInterval(detectionInterval);
+  if (!modelsLoaded) { 
+    log("models not loaded yet"); 
+    return; 
+  }
 
+  if (detectionInterval) clearInterval(detectionInterval);
   recognitionPaused = false; // ensure unpaused
 
-  const options = new faceapi.TinyFaceDetectorOptions({ inputSize: 224, scoreThreshold: 0.4 });
+  const options = new faceapi.TinyFaceDetectorOptions({
+    inputSize: 224,
+    scoreThreshold: 0.4
+  });
 
   detectionInterval = setInterval(async () => {
     try {
-      // if paused by other logic, skip detection
-      if (recognitionPaused) return;
-
+      if (recognitionPaused) return; // skip when paused
       if (!video || video.readyState < 2) return;
 
       const detection = await faceapi
@@ -350,17 +357,18 @@ function startDetectionLoop() {
         .withFaceLandmarks()
         .withFaceDescriptor();
 
-      // clear overlay
+      // Clear overlay for fresh bounding boxes
       if (ctx) ctx.clearRect(0, 0, overlay.width, overlay.height);
 
       const resultDiv = $("recognitionResult");
       const globalNoPickup = $("noPickupMode")?.checked ?? false;
       const effectiveNoPickup = globalNoPickup || tempNoPickup;
 
+      // No face detected
       if (!detection) {
         lastDetection = null;
         if (currentMode === "recognition" && resultDiv) {
-          resultDiv.innerHTML = `<p style="opacity:0.6">Show a registered face...</p>`;
+          resultDiv.innerHTML = <p style="opacity:0.6">Show a registered face...</p>;
         }
         $("registerBtn")?.setAttribute("disabled", true);
         return;
@@ -368,17 +376,16 @@ function startDetectionLoop() {
 
       lastDetection = detection;
       const box = detection.detection.box;
-      // Scale to overlay canvas coordinates
       const scaleX = overlay.width / video.videoWidth;
       const scaleY = overlay.height / video.videoHeight;
       const drawBox = {
         x: box.x * scaleX,
         y: box.y * scaleY,
         width: box.width * scaleX,
-        height: box.height * scaleY,
+        height: box.height * scaleY
       };
 
-      // Registration mode: show yellow box and enable register button
+      /* ========== Registration Mode ========== */
       if (currentMode === "registerParent") {
         if (ctx) {
           ctx.strokeStyle = "yellow";
@@ -389,40 +396,37 @@ function startDetectionLoop() {
         return;
       }
 
-      // Recognition mode
+      /* ========== Recognition Mode ========== */
       if (currentMode === "recognition" && recognitionMatcher) {
         const best = recognitionMatcher.findBestMatch(detection.descriptor);
-        //reset  recognition tracking
-        lastRecognizedParentId = null;
+
+        // Reset duplicate tracking for new/unknown faces
         if (best.label === "unknown") {
+          lastRecognizedParentId = null;
           if (ctx) {
             ctx.strokeStyle = "red";
             ctx.lineWidth = 3;
             ctx.strokeRect(drawBox.x, drawBox.y, drawBox.width, drawBox.height);
           }
-          if (resultDiv) resultDiv.innerHTML = `<p style="color:#b91c1c;font-weight:bold;">❌ Unrecognized Face</p>`;
+          if (resultDiv) resultDiv.innerHTML = <p style="color:#b91c1c;font-weight:bold;">❌ Unrecognized Face</p>;
           playBeep(300, 1000, "square");
           return;
         }
 
-        // Found a registered parent
+        // Match found
         const users = await window.dbAPI.getAllUsers();
         const parent = users.find(u => u.name === best.label);
         if (!parent) return;
 
         const links = await window.dbAPI.getAllLinks();
         const children = await window.dbAPI.getAllChildren();
-
-        // Each link has: { parentId, childId, relation }
         const linked = links
           .filter(l => l.parentId === parent.id)
-          .map(link => {
-        const c = children.find(ch => ch.id === link.childId);
-        return c ? { ...c, relation: link.relation || "guardian" } : null;
-      })
-      .filter(Boolean);
+          .flatMap(l => l.childrenIds || [])
+          .map(id => children.find(c => c.id === id))
+          .filter(Boolean);
 
-        // No children linked -> yellow
+        // No linked children — show yellow box
         if (!linked || linked.length === 0) {
           if (ctx) {
             ctx.strokeStyle = "yellow";
@@ -431,40 +435,32 @@ function startDetectionLoop() {
           }
           if (resultDiv) resultDiv.innerHTML = `
             <p style="color:#eab308;font-weight:bold;">⚠️ Recognized: ${escapeHtml(best.label)}</p>
-            <p>Relation: <strong>${escapeHtml(parent.role)}</strong></p>
             <p>No linked children found.</p>
           `;
           playBeep(200, 800, "triangle");
           return;
         }
 
-        // Recognized with linked children -> green
-        if (ctx) {
-          ctx.strokeStyle = "lime";
-          ctx.lineWidth = 3;
-          ctx.strokeRect(drawBox.x, drawBox.y, drawBox.width, drawBox.height);
-        }
-        playBeep(100, 1000, "sine");
-
-        // If effectiveNoPickup is true, we do not present the "Mark Pickup" UI — we just continue scanning
+        /* =======================================================
+           CONTINUOUS MODE (AUTO PICKUP LOGGING)
+        ======================================================= */
         if (effectiveNoPickup) {
-        // Continuous recognition (auto-mark)
-        const now = Date.now();
+          const now = Date.now();
 
-        // Avoid duplicate logging for the same parent within 10 seconds
-        if (parent.id === lastRecognizedParentId && (now - lastRecognitionTime) < 10000) {
-          if (resultDiv) resultDiv.innerHTML = `<p style="color:#22c55e;">Recognized ${escapeHtml(parent.name)} — already logged.</p>`;
-          return;
-        }
-      
-        // Update last recognized parent
-        lastRecognizedParentId = parent.id;
-        lastRecognitionTime = now;
-      
-        // Auto-generate audit records for all linked children
-        if (linked && linked.length > 0) {
+          // Prevent duplicate recognition within cooldown
+          const DUPLICATE_COOLDOWN_MS = 10000;
+          if (parent.id === lastRecognizedParentId && (now - lastRecognitionTime) < DUPLICATE_COOLDOWN_MS) {
+            if (resultDiv)
+              resultDiv.innerHTML = <p style="color:#22c55e;">Recognized ${escapeHtml(parent.name)} — already processed.</p>;
+            return;
+          }
+
+          lastRecognizedParentId = parent.id;
+          lastRecognitionTime = now;
+
           const formatted = new Date().toLocaleString();
           let newCount = 0;
+
           for (const ch of linked) {
             const exists = await auditExistsToday(parent.name, ch.name);
             if (!exists) {
@@ -481,7 +477,7 @@ function startDetectionLoop() {
               newCount++;
             }
           }
-          
+
           if (newCount > 0) {
             playBeep(100, 1200, "sine");
             if (resultDiv)
@@ -491,22 +487,28 @@ function startDetectionLoop() {
             if (resultDiv)
               resultDiv.innerHTML = <p style="color:#94a3b8;">${escapeHtml(parent.name)} recognized — no new pickups (already logged today).</p>;
           }
-      
-        // Continue scanning next faces
-        return;
-      }
 
+          return;
+        }
 
-        // Else: pause recognition until operator marks pickup (to avoid repeat)
-        recognitionPaused = true;
+        /* =======================================================
+           MANUAL PICKUP MODE
+        ======================================================= */
+        if (ctx) {
+          ctx.strokeStyle = "lime";
+          ctx.lineWidth = 3;
+          ctx.strokeRect(drawBox.x, drawBox.y, drawBox.width, drawBox.height);
+        }
+        playBeep(100, 1000, "sine");
 
-        // Build child checklist UI
+        recognitionPaused = true; // pause to let operator mark pickup
+
         const kidsHtml = linked.map(c => `
           <label style="display:block;margin:3px 0;">
-          <input type="checkbox" class="pickupChild" value="${c.id}">
-          ${escapeHtml(c.name)} (${escapeHtml(c.class)}-${escapeHtml(c.section)}) — 
-          <em>${escapeHtml(c.relation)}</em>
-          </label>`).join("");
+            <input type="checkbox" class="pickupChild" value="${c.id}">
+            ${escapeHtml(c.name)} (${escapeHtml(c.class)}-${escapeHtml(c.section)})
+          </label>
+        `).join("");
 
         if (resultDiv) resultDiv.innerHTML = `
           <p style="color:#22c55e;font-weight:bold;">✅ Recognized: ${escapeHtml(parent.name)}</p>
@@ -521,70 +523,60 @@ function startDetectionLoop() {
           <div id="recentAudits" style="margin-top:10px;font-size:0.9rem;"></div>
         `;
 
-        // wire up buttons & checkboxes
+        // Enable button when at least one child is checked
         const checkboxes = document.querySelectorAll(".pickupChild");
         const auditBtn = $("auditBtn");
         const cancelBtn = $("cancelRecognitionBtn");
 
-        // enable audit button only if at least one child checked
         if (checkboxes && auditBtn) {
-          checkboxes.forEach(cb => cb.addEventListener("change", () => {
-            const any = Array.from(checkboxes).some(c => c.checked);
-            auditBtn.disabled = !any;
-          }));
+          checkboxes.forEach(cb =>
+            cb.addEventListener("change", () => {
+              auditBtn.disabled = !Array.from(checkboxes).some(c => c.checked);
+            })
+          );
         }
 
-        // Cancel button: resume recognition without marking
         if (cancelBtn) {
           cancelBtn.onclick = () => {
             recognitionPaused = false;
-            if ($("recognitionResult")) $("recognitionResult").innerHTML = `<p style="opacity:0.6">Ready for next recognition...</p>`;
+            if ($("recognitionResult"))
+              $("recognitionResult").innerHTML = <p style="opacity:0.6">Ready for next recognition...</p>;
           };
         }
 
-        // Audit button: save selected audits, then enter temporary no-pickup mode and resume scanning
         if (auditBtn) {
           auditBtn.onclick = async () => {
             const selectedIds = Array.from(document.querySelectorAll(".pickupChild:checked")).map(i => i.value);
-            if (!selectedIds || selectedIds.length === 0) return alert("Select at least one child.");
+            if (selectedIds.length === 0) return alert("Select at least one child.");
 
             const now = new Date();
             const formatted = now.toLocaleString();
 
-            // save audits
             for (const chId of selectedIds) {
               const ch = linked.find(x => x.id === chId);
-              const link = links.find(l => l.parentId === parent.id && l.childId === ch.id);
-              await window.dbAPI.addAudit({
-                id: Date.now().toString() + Math.random(),
-                parentName: parent.name,
-                relation: link?.relation || "guardian",
-                childName: ch.name,
-                class: ch.class,
-                section: ch.section,
-                pickupTime: formatted,
-                timestamp: Date.now()
-              });
-
+              const exists = await auditExistsToday(parent.name, ch.name);
+              if (!exists) {
+                await window.dbAPI.addAudit({
+                  id: ${Date.now()}-${Math.random()},
+                  parentName: parent.name,
+                  relation: parent.role || "parent",
+                  childName: ch.name,
+                  class: ch.class,
+                  section: ch.section,
+                  pickupTime: formatted,
+                  timestamp: Date.now()
+                });
+              }
             }
 
-            // show confirmation
-            alert(`✅ Pickup marked for ${selectedIds.length} child(ren).`);
-
-            // refresh recent audits list
+            alert(✅ Pickup marked for ${selectedIds.length} child(ren).);
             await showRecentAudits();
-
-            // set temporary no-pickup mode (so system continues scanning without pausing for this same face)
-            tempNoPickup = true;
-            // resume recognition immediately
             recognitionPaused = false;
-
-            // keep the temporary no-pickup for 10 seconds (configurable)
+            tempNoPickup = true;
             setTimeout(() => { tempNoPickup = false; }, 10000);
           };
         }
 
-        // show recent audits initially
         await showRecentAudits();
       }
 
@@ -593,6 +585,7 @@ function startDetectionLoop() {
     }
   }, 600);
 }
+
 
 /* -----------------------
    Admin + UI modules
@@ -1200,6 +1193,7 @@ document.addEventListener("DOMContentLoaded", async () => {
 window._pickupDebug = {
   startCamera, stopCamera, startDetectionLoop, buildMatcherFromDB, fetchAudits, showRecentAudits
 };
+
 
 
 
