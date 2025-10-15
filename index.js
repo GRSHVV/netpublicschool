@@ -31,6 +31,30 @@ const $ = (id) => document.getElementById(id);
 const log = (...args) => console.log("[APP]", ...args);
 function setStatus(msg) { const e = $("statusMsg"); if (e) e.textContent = msg; }
 
+/* ============================================================
+   Helper: Check if audit exists for same parent–child on same day
+   ============================================================ */
+async function auditExistsToday(parentName, childName) {
+  try {
+    const all = await window.dbAPI.getAllAudits();
+    if (!Array.isArray(all)) return false;
+
+    const today = new Date();
+    const startOfDay = new Date(today.getFullYear(), today.getMonth(), today.getDate()).getTime();
+    const endOfDay = startOfDay + 86400000; // +24h
+
+    return all.some(a =>
+      a.parentName === parentName &&
+      a.childName === childName &&
+      a.timestamp >= startOfDay &&
+      a.timestamp < endOfDay
+    );
+  } catch (err) {
+    console.warn("auditExistsToday failed:", err);
+    return false;
+  }
+}
+
 /* -----------------------
    Audio helper
    ----------------------- */
@@ -440,27 +464,33 @@ function startDetectionLoop() {
         // Auto-generate audit records for all linked children
         if (linked && linked.length > 0) {
           const formatted = new Date().toLocaleString();
+          let newCount = 0;
           for (const ch of linked) {
-            await window.dbAPI.addAudit({
-              id: `${Date.now()}-${Math.random()}`,
-              parentName: parent.name,
-              relation: parent.role || "parent",
-              childName: ch.name,
-              class: ch.class,
-              section: ch.section,
-              pickupTime: formatted,
-              timestamp: Date.now()
-            });
+            const exists = await auditExistsToday(parent.name, ch.name);
+            if (!exists) {
+              await window.dbAPI.addAudit({
+                id: ${Date.now()}-${Math.random()},
+                parentName: parent.name,
+                relation: parent.role || "parent",
+                childName: ch.name,
+                class: ch.class,
+                section: ch.section,
+                pickupTime: formatted,
+                timestamp: Date.now()
+              });
+              newCount++;
+            }
           }
-          playBeep(100, 1200, "sine");
-          if (resultDiv)
-            resultDiv.innerHTML = `<p style="color:#22c55e;font-weight:bold;">✅ ${escapeHtml(parent.name)} recognized — ${linked.length} pickup(s) logged automatically.</p>`;
-          await showRecentAudits();
-        } else {
-          if (resultDiv)
-            resultDiv.innerHTML = `<p style="color:#facc15;">⚠️ Recognized ${escapeHtml(parent.name)} — but no linked children found.</p>`;
-          playBeep(200, 800, "triangle");
-        }
+          
+          if (newCount > 0) {
+            playBeep(100, 1200, "sine");
+            if (resultDiv)
+              resultDiv.innerHTML = <p style="color:#22c55e;font-weight:bold;">✅ ${escapeHtml(parent.name)} recognized — ${newCount} new pickup(s) logged automatically.</p>;
+            await showRecentAudits();
+          } else {
+            if (resultDiv)
+              resultDiv.innerHTML = <p style="color:#94a3b8;">${escapeHtml(parent.name)} recognized — no new pickups (already logged today).</p>;
+          }
       
         // Continue scanning next faces
         return;
@@ -1170,6 +1200,7 @@ document.addEventListener("DOMContentLoaded", async () => {
 window._pickupDebug = {
   startCamera, stopCamera, startDetectionLoop, buildMatcherFromDB, fetchAudits, showRecentAudits
 };
+
 
 
 
