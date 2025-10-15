@@ -408,7 +408,7 @@ function startDetectionLoop() {
             ctx.lineWidth = 3;
             ctx.strokeRect(drawBox.x, drawBox.y, drawBox.width, drawBox.height);
           }
-          if (resultDiv) resultDiv.innerHTML = <p style="color:#b91c1c;font-weight:bold;">❌ Unrecognized Face</p>;
+          if (resultDiv) resultDiv.innerHTML = '<p style="color:#b91c1c;font-weight:bold;">❌ Unrecognized Face</p>';
           playBeep(300, 1000, "square");
           return;
         }
@@ -451,7 +451,7 @@ function startDetectionLoop() {
           const DUPLICATE_COOLDOWN_MS = 10000;
           if (parent.id === lastRecognizedParentId && (now - lastRecognitionTime) < DUPLICATE_COOLDOWN_MS) {
             if (resultDiv)
-              resultDiv.innerHTML = <p style="color:#22c55e;">Recognized ${escapeHtml(parent.name)} — already processed.</p>;
+              resultDiv.innerHTML = '<p style="color:#22c55e;">Recognized ${escapeHtml(parent.name)} — already processed.</p>';
             return;
           }
 
@@ -481,11 +481,11 @@ function startDetectionLoop() {
           if (newCount > 0) {
             playBeep(100, 1200, "sine");
             if (resultDiv)
-              resultDiv.innerHTML = <p style="color:#22c55e;font-weight:bold;">✅ ${escapeHtml(parent.name)} recognized — ${newCount} new pickup(s) logged automatically.</p>;
+              resultDiv.innerHTML = '<p style="color:#22c55e;font-weight:bold;">✅ ${escapeHtml(parent.name)} recognized — ${newCount} new pickup(s) logged automatically.</p>';
             await showRecentAudits();
           } else {
             if (resultDiv)
-              resultDiv.innerHTML = <p style="color:#94a3b8;">${escapeHtml(parent.name)} recognized — no new pickups (already logged today).</p>;
+              resultDiv.innerHTML = '<p style="color:#94a3b8;">${escapeHtml(parent.name)} recognized — no new pickups (already logged today).</p>';
           }
 
           return;
@@ -540,7 +540,7 @@ function startDetectionLoop() {
           cancelBtn.onclick = () => {
             recognitionPaused = false;
             if ($("recognitionResult"))
-              $("recognitionResult").innerHTML = <p style="opacity:0.6">Ready for next recognition...</p>;
+              $("recognitionResult").innerHTML = '<p style="opacity:0.6">Ready for next recognition...</p>';
           };
         }
 
@@ -1193,6 +1193,7 @@ document.addEventListener("DOMContentLoaded", async () => {
 window._pickupDebug = {
   startCamera, stopCamera, startDetectionLoop, buildMatcherFromDB, fetchAudits, showRecentAudits
 };
+
 
 
 
