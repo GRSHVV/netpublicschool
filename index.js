@@ -465,7 +465,7 @@ function startDetectionLoop() {
             const exists = await auditExistsToday(parent.name, ch.name);
             if (!exists) {
               await window.dbAPI.addAudit({
-                id: ${Date.now()}-${Math.random()},
+                id: '${Date.now()}-${Math.random()}',
                 parentName: parent.name,
                 relation: parent.role || "parent",
                 childName: ch.name,
@@ -557,7 +557,7 @@ function startDetectionLoop() {
               const exists = await auditExistsToday(parent.name, ch.name);
               if (!exists) {
                 await window.dbAPI.addAudit({
-                  id: ${Date.now()}-${Math.random()},
+                  id: '${Date.now()}-${Math.random()}',
                   parentName: parent.name,
                   relation: parent.role || "parent",
                   childName: ch.name,
@@ -869,7 +869,7 @@ async function loadLinkParentChild() {
     // Save each link record individually
     for (const rel of selectedRelations) {
       await window.dbAPI.addLink({
-        id: Date.now().toString() + Math.random(),
+        id: 'Date.now().toString() + Math.random()',
         parentId: pid,
         childId: rel.childId,
         relation: rel.relation
@@ -1193,6 +1193,7 @@ document.addEventListener("DOMContentLoaded", async () => {
 window._pickupDebug = {
   startCamera, stopCamera, startDetectionLoop, buildMatcherFromDB, fetchAudits, showRecentAudits
 };
+
 
 
 
