@@ -20,6 +20,9 @@ let recognitionMatcher = null;
 let lastDetection = null;
 let tempNoPickup = false; // temporary no-pickup after marking
 let recognitionPaused = false; // pause detection while operator marks pickup
+let lastRecognizedParentId = null;
+let lastRecognitionTime = 0;
+
 
 /* -----------------------
    DOM helpers
@@ -365,7 +368,8 @@ function startDetectionLoop() {
       // Recognition mode
       if (currentMode === "recognition" && recognitionMatcher) {
         const best = recognitionMatcher.findBestMatch(detection.descriptor);
-
+        //reset  recognition tracking
+        lastRecognizedParentId = null;
         if (best.label === "unknown") {
           if (ctx) {
             ctx.strokeStyle = "red";
@@ -420,9 +424,48 @@ function startDetectionLoop() {
 
         // If effectiveNoPickup is true, we do not present the "Mark Pickup" UI — we just continue scanning
         if (effectiveNoPickup) {
-          if (resultDiv) resultDiv.innerHTML = `<p style="color:#22c55e;">Recognized ${escapeHtml(parent.name)} — continuing...</p>`;
+        // Continuous recognition (auto-mark)
+        const now = Date.now();
+
+        // Avoid duplicate logging for the same parent within 10 seconds
+        if (parent.id === lastRecognizedParentId && (now - lastRecognitionTime) < 10000) {
+          if (resultDiv) resultDiv.innerHTML = `<p style="color:#22c55e;">Recognized ${escapeHtml(parent.name)} — already logged.</p>`;
           return;
         }
+      
+        // Update last recognized parent
+        lastRecognizedParentId = parent.id;
+        lastRecognitionTime = now;
+      
+        // Auto-generate audit records for all linked children
+        if (linked && linked.length > 0) {
+          const formatted = new Date().toLocaleString();
+          for (const ch of linked) {
+            await window.dbAPI.addAudit({
+              id: `${Date.now()}-${Math.random()}`,
+              parentName: parent.name,
+              relation: parent.role || "parent",
+              childName: ch.name,
+              class: ch.class,
+              section: ch.section,
+              pickupTime: formatted,
+              timestamp: Date.now()
+            });
+          }
+          playBeep(100, 1200, "sine");
+          if (resultDiv)
+            resultDiv.innerHTML = `<p style="color:#22c55e;font-weight:bold;">✅ ${escapeHtml(parent.name)} recognized — ${linked.length} pickup(s) logged automatically.</p>`;
+          await showRecentAudits();
+        } else {
+          if (resultDiv)
+            resultDiv.innerHTML = `<p style="color:#facc15;">⚠️ Recognized ${escapeHtml(parent.name)} — but no linked children found.</p>`;
+          playBeep(200, 800, "triangle");
+        }
+      
+        // Continue scanning next faces
+        return;
+      }
+
 
         // Else: pause recognition until operator marks pickup (to avoid repeat)
         recognitionPaused = true;
@@ -1127,6 +1170,7 @@ document.addEventListener("DOMContentLoaded", async () => {
 window._pickupDebug = {
   startCamera, stopCamera, startDetectionLoop, buildMatcherFromDB, fetchAudits, showRecentAudits
 };
+
 
 
 
