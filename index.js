@@ -31,6 +31,8 @@ const $ = (id) => document.getElementById(id);
 const log = (...args) => console.log("[APP]", ...args);
 function setStatus(msg) { const e = $("statusMsg"); if (e) e.textContent = msg; }
 
+const params = new URLSearchParams(window.location.search);
+const maxfaces = parseInt(params.get("limit") || "2");
 /* -----------------------
    Audio helper
    ----------------------- */
