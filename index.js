@@ -111,6 +111,7 @@ async function populateCameraList() {
   try {
     // Ask for camera permission first (required before enumerateDevices)
     await navigator.mediaDevices.getUserMedia({ video: true });
+    alert("camera loaded");
     const devices = await navigator.mediaDevices.enumerateDevices();
     const cams = devices.filter(d => d.kind === "videoinput");
     const sel = $("cameraSelect");
