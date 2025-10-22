@@ -478,14 +478,14 @@ function startDetectionLoop() {
           let newCount = 0;
           for (const ch of linked) {
             
-            alert("parent recognized" + parent.name);
+            //alert("parent recognized" + parent.name);
             auditExistsAlready = await auditExistsToday(parent.name,ch.name);
-            alert(auditExistsAlready);
+            //alert(auditExistsAlready);
             
             alert("linked child" + ch.name);
             
             if(!auditExistsAlready){
-              alert("creating audit record");
+              //alert("creating audit record");
               await window.dbAPI.addAudit({
                 id: `${Date.now()}-${Math.random()}`,
                 parentName: parent.name,
