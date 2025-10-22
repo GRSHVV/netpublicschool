@@ -636,7 +636,7 @@ async function loadRegisterParent() {
     if (!lastDetection || !lastDetection.descriptor) return alert("No face detected");
     const desc = Array.from(lastDetection.descriptor);
     const allUsers =  await window.dbAPI.getAllUsers();
-    if(allUsers.length > = maxfaces){
+    if(allUsers.length >= maxfaces){
       alert('you have reached your subscribed quota  (${maxfaces} faces limit).');
       return;
     }
