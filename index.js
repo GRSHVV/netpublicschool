@@ -635,6 +635,11 @@ async function loadRegisterParent() {
     if (!name) return alert("Enter parent name");
     if (!lastDetection || !lastDetection.descriptor) return alert("No face detected");
     const desc = Array.from(lastDetection.descriptor);
+    const allUsers =  await window.dbAPI.getAllUsers();
+    if(allUsers.length > = maxfaces){
+      alert('you have reached your subscribed quota  (${maxfaces} faces limit).');
+      return;
+    }
     await window.dbAPI.addUser({ id: Date.now().toString(), name, descriptor: desc });
     await buildMatcherFromDB();
     await updateStats();
