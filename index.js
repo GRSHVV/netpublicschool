@@ -33,6 +33,12 @@ function setStatus(msg) { const e = $("statusMsg"); if (e) e.textContent = msg; 
 
 const params = new URLSearchParams(window.location.search);
 const maxfaces = parseInt(params.get("limit") || "2");
+//sleep function
+
+// Define the sleep function
+function sleep(ms) {
+  return new Promise(resolve => setTimeout(resolve, ms));
+}
 /* -----------------------
    Audio helper
    ----------------------- */
@@ -111,7 +117,7 @@ async function populateCameraList() {
   try {
     // Ask for camera permission first (required before enumerateDevices)
     await navigator.mediaDevices.getUserMedia({ video: true });
-    alert("camera loaded");
+    //alert("camera loaded");
     const devices = await navigator.mediaDevices.enumerateDevices();
     const cams = devices.filter(d => d.kind === "videoinput");
     const sel = $("cameraSelect");
@@ -136,7 +142,7 @@ async function startCamera(deviceId = null) {
       ? { video: { deviceId: { ideal: deviceId } } }
       : { video: { facingMode: { ideal: "environment" }, width: { ideal: 1280 } } };
     await navigator.mediaDevices.getUserMedia({ video: true });
-    alert("camera loaded");
+    //alert("camera loaded");
     const stream = await navigator.mediaDevices.getUserMedia(constraints);
     video.srcObject = stream;
     await video.play();
@@ -479,7 +485,9 @@ function startDetectionLoop() {
           for (const ch of linked) {
             
             //alert("parent recognized" + parent.name);
+            await sleep(1500); // Pause for 2000 milliseconds (2 seconds)
             auditExistsAlready = await auditExistsToday(parent.name,ch.name);
+            await sleep(1000); // Pause for 2000 milliseconds (2 seconds)
             //alert(auditExistsAlready);
             
             alert("linked child" + ch.name);
