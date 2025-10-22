@@ -109,6 +109,8 @@ async function auditExistsToday(parentName, childName) {
    ----------------------- */
 async function populateCameraList() {
   try {
+    // Ask for camera permission first (required before enumerateDevices)
+    await navigator.mediaDevices.getUserMedia({ video: true });
     const devices = await navigator.mediaDevices.enumerateDevices();
     const cams = devices.filter(d => d.kind === "videoinput");
     const sel = $("cameraSelect");
