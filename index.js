@@ -135,7 +135,8 @@ async function startCamera(deviceId = null) {
     const constraints = deviceId
       ? { video: { deviceId: { ideal: deviceId } } }
       : { video: { facingMode: { ideal: "environment" }, width: { ideal: 1280 } } };
-
+    await navigator.mediaDevices.getUserMedia({ video: true });
+    alert("camera loaded");
     const stream = await navigator.mediaDevices.getUserMedia(constraints);
     video.srcObject = stream;
     await video.play();
