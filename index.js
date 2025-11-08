@@ -113,53 +113,109 @@ async function auditExistsToday(parentName, childName) {
 /* -----------------------
    Camera utils
    ----------------------- */
+/* -----------------------
+   Camera utils (Updated for Android/Tablet Back Camera)
+   ----------------------- */
 async function populateCameraList() {
   try {
-    // Ask for camera permission first (required before enumerateDevices)
+    // Request permission once so device labels are revealed
     await navigator.mediaDevices.getUserMedia({ video: true });
-    //alert("camera loaded");
     const devices = await navigator.mediaDevices.enumerateDevices();
     const cams = devices.filter(d => d.kind === "videoinput");
+
     const sel = $("cameraSelect");
     if (!sel) return;
+
     sel.innerHTML = "";
     cams.forEach((c, i) => {
       const opt = document.createElement("option");
       opt.value = c.deviceId;
-      opt.textContent = c.label || `Camera ${i+1}`;
+      opt.textContent =
+        c.label ||
+        (c.deviceId.includes("back") || c.label.toLowerCase().includes("back")
+          ? "Back Camera"
+          : `Camera ${i + 1}`);
       sel.appendChild(opt);
     });
-    sel.onchange = async () => { await startCamera(sel.value); };
+
+    // Auto-select back camera if available
+    const backCam = cams.find(
+      c =>
+        c.label.toLowerCase().includes("back") ||
+        c.label.toLowerCase().includes("environment")
+    );
+    const defaultCamId = backCam ? backCam.deviceId : cams[0]?.deviceId || null;
+
+    sel.value = defaultCamId;
+    sel.onchange = async () => {
+      await startCamera(sel.value);
+    };
+
+    // Start with default camera
+    if (defaultCamId) await startCamera(defaultCamId);
   } catch (e) {
     console.warn("populateCameraList failed", e);
+    alert("Camera initialization failed. Please allow camera access.");
   }
 }
 
 async function startCamera(deviceId = null) {
   try {
     stopCamera();
+
+    // Build video constraints
     const constraints = deviceId
-      ? { video: { deviceId: { ideal: deviceId } } }
-      : { video: { facingMode: { ideal: "environment" }, width: { ideal: 1280 } } };
-    await navigator.mediaDevices.getUserMedia({ video: true });
-    //alert("camera loaded");
+      ? { video: { deviceId: { exact: deviceId } } }
+      : {
+          video: {
+            facingMode: { ideal: "environment" },
+            width: { ideal: 1280 },
+            height: { ideal: 720 },
+          },
+        };
+
+    // Request stream
     const stream = await navigator.mediaDevices.getUserMedia(constraints);
     video.srcObject = stream;
     await video.play();
 
-    // size overlay to displayed video
+    // Adjust overlay to match video size
     overlay.width = video.videoWidth;
     overlay.height = video.videoHeight;
 
     if (modelsLoaded) startDetectionLoop();
     setStatus("Camera active");
   } catch (err) {
-    console.error("startCamera error", err);
+    console.error("startCamera error:", err);
     setStatus("Camera error: " + (err.message || err.name));
-    alert("Camera access failed. Ensure permission and HTTPS.");
+
+    // Fallback: Try any available camera if back camera fails
+    try {
+      const devices = await navigator.mediaDevices.enumerateDevices();
+      const cams = devices.filter(d => d.kind === "videoinput");
+      if (cams.length > 0) {
+        const fallbackId = cams[cams.length - 1].deviceId;
+        console.warn("Retrying with fallback camera:", fallbackId);
+        const stream = await navigator.mediaDevices.getUserMedia({
+          video: { deviceId: { exact: fallbackId } },
+        });
+        video.srcObject = stream;
+        await video.play();
+        overlay.width = video.videoWidth;
+        overlay.height = video.videoHeight;
+        if (modelsLoaded) startDetectionLoop();
+        setStatus("Fallback camera active");
+      } else {
+        alert("No camera devices found.");
+      }
+    } catch (fallbackErr) {
+      console.error("Fallback camera failed:", fallbackErr);
+      alert(
+        "Camera access failed. Please check browser permissions and ensure site is served over HTTPS."
+      );
+    }
   }
 }
-
 function stopCamera() {
   if (detectionInterval) {
     clearInterval(detectionInterval);
