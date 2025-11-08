@@ -543,7 +543,7 @@ function startDetectionLoop() {
             //alert("parent recognized" + parent.name);
             await sleep(1500); // Pause for 2000 milliseconds (2 seconds)
             auditExistsAlready = await auditExistsToday(parent.name,ch.name);
-            await sleep(1000); // Pause for 2000 milliseconds (2 seconds)
+            await sleep(2000); // Pause for 2000 milliseconds (2 seconds)
             //alert(auditExistsAlready);
             
             alert("linked child" + ch.name);
