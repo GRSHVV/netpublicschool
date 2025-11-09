@@ -535,47 +535,40 @@ function startDetectionLoop() {
         lastRecognitionTime = now;
       
         // Auto-generate audit records for all linked children
-        if (linked && linked.length > 0) {
-          const formatted = new Date().toLocaleString();
-          let newCount = 0;
-          for (const ch of linked) {
-            
-            //alert("parent recognized" + parent.name);
-            await sleep(1500); // Pause for 2000 milliseconds (2 seconds)
-            auditExistsAlready = await auditExistsToday(parent.name,ch.name);
-            await sleep(2000); // Pause for 2000 milliseconds (2 seconds)
-            //alert(auditExistsAlready);
-            
-            alert("linked child" + ch.name);
-            
-            if(!auditExistsAlready){
-              //alert("creating audit record");
-              await window.dbAPI.addAudit({
-                id: `${Date.now()}-${Math.random()}`,
-                parentName: parent.name,
-                relation: parent.role || "parent",
-                childName: ch.name,
-                class: ch.class,
-                section: ch.section,
-                pickupTime: formatted,
-                timestamp: Date.now()
-              });
-              newCount++;
-            }
-            
-          }
-          if(newCount > 0){ //new audit record added 
-            playBeep(100, 1200, "sine");
-            if (resultDiv)
-              resultDiv.innerHTML = `<p style="color:#22c55e;font-weight:bold;">✅ ${escapeHtml(parent.name)} recognized — ${linked.length} pickup(s) logged automatically.</p>`;
-            await showRecentAudits();
-          }  
-        } else { //linked lenth == 0
-          if (resultDiv)
-            resultDiv.innerHTML = `<p style="color:#facc15;">⚠️ Recognized ${escapeHtml(parent.name)} — but no linked children found.</p>`;
-          playBeep(200, 800, "triangle");
-        }
-      
+        // Auto-generate audit records for all linked children
+if (linked && linked.length > 0) {
+  const formatted = new Date().toLocaleString();
+  let newCount = 0;
+  for (const ch of linked) {
+    const exists = await auditExistsToday(parent.name, ch.name);
+    if (!exists) {
+      await window.dbAPI.addAudit({
+        id: `${Date.now()}-${Math.random()}`,
+        parentName: parent.name,
+        relation: parent.role || "parent",
+        childName: ch.name,
+        class: ch.class,
+        section: ch.section,
+        pickupTime: formatted,
+        timestamp: Date.now()
+      });
+      newCount++;
+      // Wait a short delay to ensure IndexedDB commit completes
+      await new Promise(r => setTimeout(r, 300));
+    }
+  }
+  if (newCount > 0) {
+    playBeep(100, 1200, "sine");
+    if (resultDiv)
+      resultDiv.innerHTML = `<p style="color:#22c55e;font-weight:bold;">✅ ${escapeHtml(parent.name)} recognized — ${newCount} pickup(s) logged automatically.</p>`;
+    await showRecentAudits();
+  } else {
+    if (resultDiv)
+      resultDiv.innerHTML = `<p style="color:#22c55e;">Recognized ${escapeHtml(parent.name)} — already logged today.</p>`;
+  }
+  return;
+}
+
         // Continue scanning next faces
         return;
       }
